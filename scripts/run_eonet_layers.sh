@@ -2,4 +2,4 @@
 set -euo pipefail
 
 cd /home/hl-lenovo/projects/nasahub
-/usr/bin/docker compose -f infra/docker-compose.yml run --rm ingestor python -m ingestors.eonet.layers >> logs/eonet_layers.log 2>&1
+/usr/bin/docker compose -f infra/docker-compose.yml run --rm ingestor python -m ingestors.eonet.layers
