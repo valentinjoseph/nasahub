@@ -1,8 +1,23 @@
+from pathlib import Path
 from datetime import date, datetime, timezone
 import unittest
+from unittest.mock import patch
 
-from api.main import app
+from api.main import (
+    DASHBOARD_INDEX,
+    FRONTEND_DIR,
+    app,
+    build_access_log_payload,
+    get_request_id,
+    health,
+    health_live,
+    health_ready,
+    path_requires_auth,
+    request_has_valid_auth,
+)
 from api.routes.analytics import (
+    ANALYTICS_ENDPOINTS,
+    get_analytics_catalog,
     list_eonet_category_summary,
     list_eonet_event_overview,
     list_exoplanet_catalog,
@@ -59,6 +74,7 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
         self.assertEqual(
             analytics_paths,
             {
+                "/analytics/catalog",
                 "/analytics/ingestion-status",
                 "/analytics/neows/daily-summary",
                 "/analytics/neows/kpis",
@@ -73,6 +89,7 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
             },
         )
         ingestion_status = openapi["paths"]["/analytics/ingestion-status"]["get"]
+        analytics_catalog = openapi["paths"]["/analytics/catalog"]["get"]
         daily_summary = openapi["paths"]["/analytics/neows/daily-summary"]["get"]
         kpis = openapi["paths"]["/analytics/neows/kpis"]["get"]
         eonet_category_summary = openapi["paths"]["/analytics/eonet/category-summary"]["get"]
@@ -84,6 +101,12 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
         osdr_assay_type_summary = openapi["paths"]["/analytics/osdr/assay-type-summary"]["get"]
         osdr_datasets = openapi["paths"]["/analytics/osdr/datasets"]["get"]
 
+        self.assertEqual(
+            analytics_catalog["responses"]["200"]["content"]["application/json"]["schema"][
+                "$ref"
+            ],
+            "#/components/schemas/AnalyticsCatalogResponse",
+        )
         self.assertEqual(
             ingestion_status["responses"]["200"]["content"]["application/json"]["schema"][
                 "items"
@@ -177,6 +200,137 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
         self.assertEqual(osdr_parameters["data_source"]["anyOf"][0]["type"], "string")
         self.assertEqual(osdr_parameters["dataset_accession"]["anyOf"][0]["type"], "string")
 
+    def test_exoplanet_catalog_query_casts_nullable_disc_year_parameter(self):
+        db = FakeSession(
+            rows=[
+                {
+                    "pl_name": "Kepler-22 b",
+                    "hostname": "Kepler-22",
+                    "discovery_method": "Transit",
+                    "disc_year": 2011,
+                    "disc_facility": "Kepler",
+                    "sy_dist": 195.0,
+                    "pl_orbper": 289.9,
+                    "pl_rade": 2.4,
+                    "pl_bmasse": None,
+                    "st_teff": 5518.0,
+                    "last_ingested_at": datetime(2026, 4, 10, tzinfo=timezone.utc),
+                }
+            ],
+            scalar_values=[1],
+        )
+
+        payload = list_exoplanet_catalog(db=db)
+
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["items"][0]["pl_name"], "Kepler-22 b")
+        self.assertTrue(any("CAST(:disc_year AS integer) IS NULL" in query for query in db.queries))
+        self.assertTrue(any("c.disc_year = CAST(:disc_year AS integer)" in query for query in db.queries))
+
+    def test_health_live_does_not_depend_on_database(self):
+        self.assertEqual(
+            health_live(),
+            {
+                "status": "ok",
+                "database": "unknown",
+            },
+        )
+
+    def test_health_ready_reports_database_success(self):
+        with patch("api.main.database_ready", return_value=True):
+            self.assertEqual(
+                health_ready(),
+                {
+                    "status": "ok",
+                    "database": "ok",
+                },
+            )
+            self.assertEqual(health(), {"status": "ok", "database": "ok"})
+
+    def test_health_ready_reports_database_failure(self):
+        with patch("api.main.database_ready", return_value=False):
+            self.assertEqual(
+                health_ready(),
+                {
+                    "status": "degraded",
+                    "database": "error",
+                },
+            )
+
+    def test_health_paths_are_exempt_from_auth(self):
+        self.assertFalse(path_requires_auth("/"))
+        self.assertFalse(path_requires_auth("/dashboard"))
+        self.assertFalse(path_requires_auth("/dashboard-assets/dashboard.js"))
+        self.assertFalse(path_requires_auth("/health"))
+        self.assertFalse(path_requires_auth("/health/live"))
+        self.assertFalse(path_requires_auth("/health/ready"))
+        self.assertTrue(path_requires_auth("/analytics/catalog"))
+        self.assertTrue(path_requires_auth("/docs"))
+
+    def test_request_has_valid_auth_supports_api_key_and_bearer(self):
+        expected_token = "secret-token"
+
+        self.assertTrue(
+            request_has_valid_auth({"x-api-key": "secret-token"}, expected_token)
+        )
+        self.assertTrue(
+            request_has_valid_auth(
+                {"authorization": "Bearer secret-token"},
+                expected_token,
+            )
+        )
+        self.assertFalse(
+            request_has_valid_auth({"x-api-key": "wrong-token"}, expected_token)
+        )
+        self.assertFalse(
+            request_has_valid_auth({"authorization": "Bearer wrong-token"}, expected_token)
+        )
+        self.assertFalse(request_has_valid_auth({}, expected_token))
+
+    def test_get_request_id_reuses_header_or_generates_one(self):
+        self.assertEqual(
+            get_request_id({"x-request-id": "req-123"}),
+            "req-123",
+        )
+        generated = get_request_id({})
+        self.assertTrue(generated)
+        self.assertIsInstance(generated, str)
+
+    def test_build_access_log_payload_is_structured_and_rounded(self):
+        payload = build_access_log_payload(
+            request_id="req-123",
+            method="GET",
+            path="/analytics/catalog",
+            status_code=200,
+            duration_ms=12.3456,
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "request_id": "req-123",
+                "method": "GET",
+                "path": "/analytics/catalog",
+                "status_code": 200,
+                "duration_ms": 12.35,
+            },
+        )
+
+    def test_dashboard_files_exist(self):
+        self.assertTrue(FRONTEND_DIR.exists())
+        self.assertTrue(DASHBOARD_INDEX.exists())
+        self.assertTrue((Path(FRONTEND_DIR) / "dashboard.css").exists())
+        self.assertTrue((Path(FRONTEND_DIR) / "dashboard.js").exists())
+
+    def test_analytics_catalog_lists_known_endpoints(self):
+        response = get_analytics_catalog()
+
+        self.assertEqual(response, {"endpoints": ANALYTICS_ENDPOINTS})
+        self.assertEqual(response["endpoints"][0].path, "/analytics/ingestion-status")
+        paginated_endpoints = [endpoint for endpoint in response["endpoints"] if endpoint.paginated]
+        self.assertTrue(paginated_endpoints)
+        self.assertIn("limit", paginated_endpoints[0].filters)
+
     def test_page_response_models_expose_standard_pagination_fields(self):
         schemas = app.openapi()["components"]["schemas"]
 
@@ -191,6 +345,8 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
             self.assertEqual(properties["total"]["type"], "integer")
             self.assertEqual(properties["limit"]["type"], "integer")
             self.assertEqual(properties["offset"]["type"], "integer")
+        catalog_properties = schemas["AnalyticsCatalogResponse"]["properties"]
+        self.assertEqual(set(catalog_properties), {"endpoints"})
 
     def test_list_ingestion_status_returns_rows_from_view(self):
         rows = [
@@ -401,7 +557,7 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
         )
         self.assertIn("FROM dmt_generic.v_dmt_exoplanet_catalog c", db.queries[1])
         self.assertIn("c.discovery_method = CAST(:discovery_method AS text)", db.queries[0])
-        self.assertIn("c.disc_year = :disc_year", db.queries[1])
+        self.assertIn("c.disc_year = CAST(:disc_year AS integer)", db.queries[1])
         self.assertEqual(
             db.params[0],
             {

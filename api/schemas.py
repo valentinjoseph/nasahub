@@ -3,6 +3,23 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 
+class HealthResponse(BaseModel):
+    status: str
+    database: str
+
+
+class AnalyticsEndpointInfoResponse(BaseModel):
+    path: str
+    source: str
+    summary: str
+    paginated: bool
+    filters: list[str]
+
+
+class AnalyticsCatalogResponse(BaseModel):
+    endpoints: list[AnalyticsEndpointInfoResponse]
+
+
 class IngestionStatusResponse(BaseModel):
     source_name: str
     source_endpoint: str

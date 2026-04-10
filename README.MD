@@ -1,273 +1,138 @@
-# NasaHub
-source: https://api.nasa.gov/
+# NASAHub
+
+Self-hosted NASA data platform running on the **Lenovo M920q**.
+
+NASAHub ingests raw source data into PostgreSQL, curates analytics-ready views, exposes them through FastAPI, and now includes a private dashboard for admin use from the MacBook.
+
+Source APIs and datasets currently in scope include:
+
+* EONET
+* NeoWs
+* Exoplanet Archive
+* OSDR
+
 ## Goal
 
-NasaHub is a self-hosted NASA data ingestion project running on the **Lenovo M920q**.
+NASAHub is being built as a private, self-hosted analytics platform that can later support:
 
-The goal is to:
+* curated analytics endpoints
+* dashboards and internal tools
+* downstream apps
+* a future chat or agent layer on top of trusted curated data
 
-* ingest NASA API data into PostgreSQL
-* keep a raw **staging layer** close to source payloads
-* track ingestion runs and row lineage
-* expose data through an API
-* later build monitoring, views, and app features on top
+The core design principle is:
 
-Current first scope:
+* ingest raw source data into staging
+* track lineage and run status centrally
+* build curated views above staging
+* expose curated data through a stable API instead of direct database access
 
-* **EONET**
-
-  * events
-  * categories
-  * sources
-  * layers
-
-Planned next scope:
-
-* **NeoWs**
-
-  * neo_feed
-  * neo_lookup
-  * neo_browse
-
-* **Open Science Data Repository**
-
-* **TLE API**
-
-* **Exoplanet**
----
-
-## Machines and roles
+## Machines And Roles
 
 ### Lenovo M920q
 
-Main always-on server.
-
-Responsibilities:
+The Lenovo is the real NASAHub server. It hosts:
 
 * Ubuntu Server 24.04
-* Docker host
+* Docker
 * PostgreSQL
-* FastAPI container
-* ingestion jobs
-* cron scheduling
-* logs
-* observability stack already running
+* FastAPI
+* Alembic migrations
+* ingestion jobs and cron wrappers
+* the project codebase
+* the stored data
 
 ### MacBook Air
 
-Admin and development machine.
+The MacBook is the admin and development machine. It is used to:
 
-Responsibilities:
+* connect to the Lenovo with SSH
+* edit the code with VS Code Remote SSH
+* inspect PostgreSQL through an SSH tunnel
+* browse the private dashboard and API
 
-* SSH into Lenovo
-* VS Code Remote SSH
-* DBeaver connection to PostgreSQL
-* browser access to app and dashboards
-* optional remote Docker control
+Important operating model:
 
-There is **no Raspberry Pi** in the setup anymore.
+* all code lives on the Lenovo
+* all data lives on the Lenovo
+* Docker runs on the Lenovo
+* PostgreSQL runs on the Lenovo
+* FastAPI runs on the Lenovo
+* the MacBook is only the remote admin/dev client
 
----
+## Current Architecture
 
-## Operating model
+NASAHub now has four practical layers:
 
-Development happens from the Mac, but code lives on Lenovo.
+1. Ingestion layer
+   Source-specific ingestors load raw data into PostgreSQL staging schemas.
+2. Technical metadata layer
+   `tech.run_management` and `tech.id_management` track run status, inserted rows, and lineage.
+3. Curated analytics layer
+   `dmt_generic` contains analytics-ready views built on top of staging.
+4. Access layer
+   FastAPI exposes curated analytics endpoints, and a private dashboard consumes those endpoints.
 
-Pattern:
-
-* edit code from Mac in VS Code via Remote SSH
-* files are stored on Lenovo
-* Docker runs on Lenovo
-* PostgreSQL runs in Docker on Lenovo
-* FastAPI runs in Docker on Lenovo
-* ingestion jobs run on Lenovo
-* Mac is only the admin/dev client
-
----
-
-## Project architecture
-
-### Repository structure
+## Repository Structure
 
 ```text
 nasahub/
 ├── api/
-│   ├── __init__.py
 │   ├── main.py
-│   └── Dockerfile
+│   ├── routes/
+│   │   └── analytics.py
+│   └── schemas.py
 ├── core/
-│   ├── __init__.py
 │   └── config.py
 ├── db/
-│   ├── __init__.py
 │   ├── deps.py
 │   ├── session.py
-│   └── alembic/
+│   └── alembic/versions/
+├── docs/
+│   └── project_documentation.md
+├── frontend/
+│   ├── index.html
+│   ├── dashboard.css
+│   └── dashboard.js
 ├── ingestors/
-│   ├── __init__.py
-│   └── eonet/
-│       ├── __init__.py
-│       ├── events.py
-│       ├── categories.py
-│       ├── sources.py
-│       └── layers.py
 ├── infra/
-│   ├── docker-compose.yml
-│   └── .env
-├── logs/
+│   └── docker-compose.yml
 ├── scripts/
-└── requirements.txt
+└── tests/
+    └── test_analytics_routes.py
 ```
 
----
+## Database Design
 
-## Current technical design
+### Schemas In Use
 
-## 1. Infrastructure
+* `tech`
+* `stg_eonet`
+* `stg_neows`
+* `stg_exoplanet`
+* `stg_osdr`
+* `dmt_generic`
 
-Docker Compose currently manages:
+### Technical Tables
 
-* `postgres`
-* `api`
-* `ingestor` service definition for one-shot jobs
+#### `tech.run_management`
 
-### Containers
+Tracks one row per ingestion execution, including:
 
-* `nasahub-postgres`: always on
-* `nasahub-api`: always on
-* `ingestor`: run on demand from cron
-
-### API
-
-FastAPI runs in Docker with Uvicorn inside the container.
-
-That means:
-
-* no need for a shell session
-* no need for the Mac to stay on
-* Lenovo keeps the API running on its own
-
----
-
-## 2. Configuration
-
-Shared configuration is centralized in:
-
-```text
-core/config.py
-```
-
-It reads environment variables from:
-
-```text
-infra/.env
-```
-
-Typical variables:
-
-* `POSTGRES_DB`
-* `POSTGRES_USER`
-* `POSTGRES_PASSWORD`
-* `POSTGRES_HOST`
-* `POSTGRES_PORT`
-
----
-
-## 3. Database design
-
-### Main design principle
-
-The current database approach is:
-
-* **raw staging first**
-* keep source data close to API payloads
-* add ingestion metadata columns
-* add technical lineage tables
-* build cleaned views or downstream models later
-
----
-
-## Schemas
-
-### `tech`
-
-Technical metadata and lineage.
-
-### `stg_eonet`
-
-Raw staging tables for EONET.
-
-### `stg_neows`
-
-Reserved for upcoming NeoWs ingestion.
-
----
-
-## Tech schema
-
-### `tech.run_management`
-
-Tracks each ingestion run.
-
-Purpose:
-
-* one row per execution
-* stores run metadata and status
-
-Current fields:
-
-* `s_run_id`
 * `source_name`
 * `source_endpoint`
 * `status`
 * `run_started_at`
 * `run_finished_at`
 * `records_inserted`
-* `created_at`
 
-Meaning:
+#### `tech.id_management`
 
-* `source_name`: API family, for example `eonet`
-* `source_endpoint`: endpoint name, for example `events`
-* `status`: current run state
-* `records_inserted`: number of newly inserted rows
+Tracks lineage between source records, staging rows, and runs.
 
----
+### Staging Convention
 
-### `tech.id_management`
-
-Tracks lineage for inserted staging rows.
-
-Purpose:
-
-* one row per inserted staging record
-* stores which staging row was created
-* links staging insert to run metadata
-
-Current fields:
-
-* `id`
-* `source_name`
-* `source_table`
-* `source_record_id`
-* `staging_schema`
-* `staging_row_id`
-* `s_run_id`
-* `s_source_url`
-* `s_ingested_at`
-
-Meaning:
-
-* `source_record_id`: identifier from the source API
-* `staging_schema`: schema where the row was inserted
-* `staging_row_id`: actual surrogate id of the inserted staging row
-* `s_run_id`: ingestion run that created the row
-
----
-
-## Staging metadata convention
-
-Every staging table includes technical columns:
+Staging tables keep source data close to the original payload and include:
 
 * `id`
 * `s_ingested_at`
@@ -275,272 +140,223 @@ Every staging table includes technical columns:
 * `s_run_id`
 * `s_payload`
 
-Purpose:
+### Curated Analytics Schema
 
-* `id`: local surrogate key
-* `s_ingested_at`: timestamp of ingestion
-* `s_source_url`: exact API endpoint used
-* `s_run_id`: link to `tech.run_management`
-* `s_payload`: raw source JSON payload
+`dmt_generic` contains the curated analytics views used by the API and dashboard.
 
----
+Current curated views include:
 
-## EONET staging tables
+* `v_dmt_ingestion_status`
+* `v_dmt_neows_daily_summary`
+* `v_dmt_neows_kpis`
+* `v_dmt_eonet_category_summary`
+* `v_dmt_eonet_event_overview`
+* `v_dmt_exoplanet_discovery_yearly_summary`
+* `v_dmt_exoplanet_discovery_method_summary`
+* `v_dmt_exoplanet_catalog`
+* `v_dmt_osdr_dataset_summary`
+* `v_dmt_osdr_assay_type_summary`
+* `v_dmt_osdr_dataset_catalog`
 
-### `stg_eonet.events`
+## FastAPI
 
-Stores event records from EONET events endpoint.
+FastAPI runs in Docker on the Lenovo and acts as the controlled access layer over curated data.
 
-Main source fields:
+### Health And Platform Endpoints
 
-* `event_id`
-* `title`
-* `description`
-* `link`
-* `closed`
-* `categories`
-* `sources`
-* `geometry`
+* `GET /health/live`
+* `GET /health/ready`
+* `GET /health`
+* `GET /ingestion-runs`
+* `GET /analytics/catalog`
 
-Notes:
+### Analytics Endpoints
 
-* nested structures are stored as JSONB
-* duplicates are prevented on `event_id`
+#### Tech / platform
 
----
+* `GET /analytics/ingestion-status`
 
-### `stg_eonet.categories`
+#### NeoWs
 
-Stores EONET categories.
+* `GET /analytics/neows/daily-summary`
+* `GET /analytics/neows/kpis`
 
-Main source fields:
+#### EONET
 
+* `GET /analytics/eonet/category-summary`
+* `GET /analytics/eonet/event-overview`
+
+Supported query parameters:
+
+* `limit`
+* `offset`
 * `category_id`
-* `title`
-* `description`
-* `link`
-* `layers`
+* `event_status`
 
-Notes:
+#### Exoplanet
 
-* `layers` is stored as text URL
-* duplicates are prevented on `category_id`
+* `GET /analytics/exoplanet/discovery-yearly-summary`
+* `GET /analytics/exoplanet/discovery-method-summary`
+* `GET /analytics/exoplanet/catalog`
 
----
+Supported query parameters:
 
-### `stg_eonet.sources`
+* `limit`
+* `offset`
+* `discovery_method`
+* `disc_year`
 
-Stores EONET sources.
+#### OSDR
 
-Main source fields:
+* `GET /analytics/osdr/dataset-summary`
+* `GET /analytics/osdr/assay-type-summary`
+* `GET /analytics/osdr/datasets`
 
-* `source_id`
-* `title`
-* `source`
-* `link`
+Supported query parameters:
 
-Notes:
+* `limit`
+* `offset`
+* `data_source`
+* `dataset_accession`
 
-* duplicates are prevented on `source_id`
+### API Contract Features
 
----
+The analytics API now includes:
 
-### `stg_eonet.layers`
+* typed response models
+* pagination wrappers for larger result sets
+* endpoint discovery through `/analytics/catalog`
+* liveness and readiness endpoints
+* optional private token-based auth
+* request IDs and structured access logging
 
-Stores one row per actual layer entry returned from category-specific layers endpoints.
+## Private Dashboard
 
-Main fields:
+NASAHub now includes a private dashboard served directly by FastAPI.
 
-* `category_id`
-* `category_title`
-* `layer_name`
-* `service_url`
-* `service_type_id`
-* `parameters`
-* `endpoint_link`
-* `response_title`
-* `response_description`
+Routes:
 
-Notes:
+* `GET /dashboard`
+* `GET /` redirects to `/dashboard`
 
-* layers are fetched from category `layers` URLs
-* duplicates are prevented on `(category_id, layer_name)`
+Static assets:
 
----
+* `/dashboard-assets/dashboard.css`
+* `/dashboard-assets/dashboard.js`
 
-## Deduplication strategy
+The dashboard is intentionally lightweight:
 
-The project currently uses **business-key deduplication** in staging.
+* static HTML/CSS/JS
+* no Node or frontend build system
+* designed for private use from the MacBook browser
 
-Meaning:
+Dashboard coverage:
 
-* same source record should not be inserted twice
-* repeated hourly runs skip existing rows
+* system overview
+* ingestion status
+* NeoWs signals
+* EONET activity
+* Exoplanet discovery
+* OSDR operations
+* filtered explorer panels for large paginated endpoints
 
-Current dedupe keys:
+## Security And Exposure Model
 
-* events → `event_id`
-* categories → `category_id`
-* sources → `source_id`
-* layers → `(category_id, layer_name)`
+Current posture:
 
-Loaders use:
+* PostgreSQL remains private on the Lenovo
+* users should consume data through the API, not direct DB access
+* the dashboard is intended as a private admin interface
+* API auth can be enabled with environment variables
 
-* `ON CONFLICT DO NOTHING RETURNING id`
+Relevant config in `core/config.py`:
 
-Behavior:
+* `API_ENABLE_DOCS`
+* `API_REQUIRE_AUTH`
+* `API_AUTH_TOKEN`
+* `API_TITLE`
+* `API_VERSION`
 
-* if the row is new, it is inserted and tracked in `tech.id_management`
-* if it already exists, it is skipped
+If auth is enabled, protected routes accept either:
 
----
+* `X-API-Key: <token>`
+* `Authorization: Bearer <token>`
 
-## Ingestor architecture
+Health endpoints and the dashboard remain usable according to the configured auth exemptions in the app.
 
-### Current EONET ingestors
+## Scheduling And Monitoring
 
-Implemented:
+Ingestion jobs are triggered by wrapper scripts under `scripts/`.
 
-* `ingestors.eonet.events`
-* `ingestors.eonet.categories`
-* `ingestors.eonet.sources`
-* `ingestors.eonet.layers`
+Monitoring no longer relies on flat log files. The intended monitoring model is:
 
-### Loader pattern
+* `tech.run_management` for run health and timing
+* `tech.id_management` for lineage
+* curated analytics views such as ingestion status
+* API health/readiness endpoints
+* structured container logs for request tracing
 
-Each loader does:
+## Testing
 
-1. call the source API
-2. insert a row in `tech.run_management`
-3. insert new rows into staging
-4. insert lineage rows into `tech.id_management`
-5. update run status to `success`
+Current API and analytics coverage is backed by:
 
----
+* `tests/test_analytics_routes.py`
 
-## API
+The tests cover:
 
-FastAPI is available through the Dockerized API service.
+* route registration in OpenAPI
+* response model wiring
+* pagination/filter behavior
+* analytics catalog behavior
+* auth helper behavior
+* health endpoint behavior
+* request ID and access-log helpers
+* dashboard file presence
+* view-backed route query behavior
 
-Current endpoint:
+Run tests locally on the Lenovo:
 
-* `/health`
-
-The health endpoint checks:
-
-* API is up
-* database connection works
-
----
-
-## Scheduling
-
-### Current approach
-
-Hourly ingestion is scheduled on the Lenovo via **cron**.
-
-Cron runs one-shot Docker ingestor jobs.
-
-Pattern:
-
-* start container
-* run one ingestion module
-* write output to log file
-* container exits
-
-### Current schedule
-
-EONET jobs are staggered across the hour:
-
-* events
-* categories
-* sources
-* layers
-
-This avoids all jobs running at the exact same minute.
-
----
-
-## Logging
-
-Cron redirects stdout and stderr into project log files under:
-
-```text
-/home/hl-lenovo/projects/nasahub/logs/
+```bash
+./.venv/bin/python -m unittest tests.test_analytics_routes
 ```
 
-One log file per ingestion type, not one file per execution.
+## How To Run
 
-Examples:
+From the Lenovo project directory:
 
-* `eonet_events.log`
-* `eonet_categories.log`
-* `eonet_sources.log`
-* `eonet_layers.log`
-
-### Rotation
-
-Log rotation is handled by system `logrotate`, using a custom config under:
-
-```text
-/etc/logrotate.d/nasahub
+```bash
+cd /home/hl-lenovo/projects/nasahub/infra
+docker compose up -d --build
 ```
 
-So logs rotate automatically on Lenovo without needing custom cron entries for rotation.
+Useful URLs:
 
----
+* API docs: `http://192.168.1.28:8000/docs` when docs are enabled
+* Dashboard: `http://192.168.1.28:8000/dashboard`
+* Health: `http://192.168.1.28:8000/health/ready`
 
-## Current status
+## Current Status
 
-Working:
+Implemented and live:
 
-* PostgreSQL in Docker
-* FastAPI in Docker
-* Alembic migrations
-* EONET staging schema
-* EONET technical lineage schema
-* EONET ingestors
-* hourly scheduling on Lenovo
-* file logging with rotation
+* raw staging schemas for EONET, NeoWs, Exoplanet, and OSDR
+* technical lineage and run-management tables
+* curated analytics views in `dmt_generic`
+* analytics API endpoints across all current sources
+* typed response models
+* pagination and filtering for larger endpoints
+* analytics endpoint catalog
+* request tracing and structured access logs
+* optional API auth layer
+* private dashboard served from FastAPI
+* test coverage for analytics routing and helpers
 
-Not done yet:
+## Next Likely Steps
 
-* NeoWs staging tables
-* NeoWs ingestors
-* richer API endpoints
-* frontend
-* analytical views
-* dashboards specific to project data
+Recommended next areas after documentation:
 
----
-
-## Next planned steps
-
-Recommended order:
-
-1. let hourly EONET schedule run and verify behavior
-2. review logs and run counts
-3. confirm no duplicate inserts occur
-4. add `stg_neows` tables
-5. implement NeoWs loaders:
-
-   * `neo_feed`
-   * `neo_lookup`
-   * `neo_browse`
-6. expose read endpoints in FastAPI
-7. later add frontend or Grafana views
-
----
-
-## Core principles for the repository
-
-This project should continue following these rules:
-
-* code lives on Lenovo
-* Mac is only admin/dev machine
-* app services run in Docker on Lenovo
-* raw source data first
-* staging schema stays close to source API
-* technical lineage is tracked centrally
-* dedupe happens in staging through business keys
-* cleaned/latest-record logic belongs in views or downstream models, not in raw staging
+* dashboard polish and richer per-source exploration
+* stronger auth and access control if exposure broadens
+* additional curated views for new domains
+* frontend UX improvements once API contracts are stable
+* future GenAI/chat layer on top of curated analytics

@@ -1,93 +1,118 @@
-NasaHub is a self-hosted NASA data platform running on a Lenovo M920q.
+# NASAHub Project Documentation
 
-## Project goal
+NASAHub is a private, self-hosted NASA data platform running on a Lenovo M920q.
 
-The platform is designed to:
+Its purpose is to ingest raw scientific data, track lineage and operational status, curate analytics-ready datasets, expose them through FastAPI, and provide a private dashboard for admin use from the MacBook.
 
-* ingest space/science data APIs into PostgreSQL
-* keep a raw staging layer close to source payloads
-* track ingestion runs and row lineage centrally
-* expose data through a FastAPI backend
-* later support views, monitoring, analytics, and application features on top of the staged data
-
-## Machine roles
+## 1. Deployment Model
 
 ### Lenovo M920q
 
-Always-on server:
+The Lenovo is the actual server and runtime environment.
+
+It hosts:
 
 * Ubuntu Server 24.04
-* Docker host
-* PostgreSQL in Docker
-* FastAPI in Docker
-* ingestion jobs
-* cron scheduling
-* observability/admin stack
+* Docker and Docker Compose
+* PostgreSQL
+* FastAPI
+* Alembic migrations
+* cron-triggered ingestion jobs
+* the full project codebase
+* all persisted project data
 
 ### MacBook Air
 
-Admin/dev machine only:
+The MacBook is the admin and development machine.
 
-* SSH into Lenovo
-* VS Code Remote SSH
-* DBeaver through SSH tunnel
-* browser access to LAN-exposed services
+It is used to:
 
-There is no Raspberry Pi in the setup anymore.
+* SSH into the Lenovo
+* use VS Code Remote SSH for development
+* inspect PostgreSQL over an SSH tunnel
+* browse the private dashboard and API from a normal workstation
 
-## Operating model
+Important principle:
 
-* all project code lives on the Lenovo
-* development is done remotely from the Mac via Remote SSH
-* Docker runs on the Lenovo
-* PostgreSQL runs in Docker on the Lenovo
-* FastAPI runs in Docker on the Lenovo
-* ingestion jobs run on the Lenovo
-* the Mac is only the admin/development client
+* code and data live on the Lenovo
+* coding and viewing happen from the MacBook
+* the MacBook is not the runtime host
 
-## Repository structure
+## 2. Platform Objective
 
-* `api/` → FastAPI app + Dockerfile
-* `core/` → shared config
-* `db/` → DB session/deps/Alembic
-* `ingestors/` → source-specific loaders
-* `infra/` → docker-compose + `.env`
-* `scripts/` → cron wrapper scripts
-* `logs/` existed initially but should now be ignored and no longer used for ingestion output
+NASAHub is evolving into a GenAI-ready analytics platform with this flow:
 
-## Database design
+1. ingest raw source data into staging
+2. track ingestion runs and lineage centrally
+3. transform raw data into curated analytics views
+4. expose curated datasets through a stable API
+5. later support dashboards, apps, and chat/agent features
 
-### Design principles
+This means NASAHub is no longer just an ingestion project. It is becoming a layered analytics platform.
 
-* raw staging first
-* source payloads kept close to source
-* lineage tracked centrally
-* cleaned/latest/business logic deferred to downstream views/models later
+## 3. Repository Structure
 
-### Technical schemas/tables
+Key directories:
 
-Schemas:
+* `api/` -> FastAPI app, routers, response models
+* `core/` -> shared configuration
+* `db/` -> DB session/dependencies and Alembic migrations
+* `docs/` -> project documentation
+* `frontend/` -> private dashboard assets
+* `ingestors/` -> source-specific ingestion modules
+* `infra/` -> Docker Compose and environment configuration
+* `scripts/` -> cron wrapper scripts
+* `tests/` -> analytics and API tests
+
+Important implementation files:
+
+* `api/main.py`
+* `api/routes/analytics.py`
+* `api/schemas.py`
+* `core/config.py`
+* `tests/test_analytics_routes.py`
+
+## 4. Database Architecture
+
+### Schemas
+
+The active database design uses:
 
 * `tech`
 * `stg_eonet`
 * `stg_neows`
 * `stg_exoplanet`
 * `stg_osdr`
+* `dmt_generic`
 
-Technical tables:
+### Technical Metadata Layer
 
-* `tech.run_management`
+#### `tech.run_management`
 
-  * one row per ingestion run
-  * tracks source, endpoint, status, timing, inserted row count
-* `tech.id_management`
+Purpose:
 
-  * one row per inserted staging row
-  * tracks lineage between source record, staging row, and run
+* one row per ingestion execution
+* operational run status and timing
 
-### Staging metadata convention
+Typical fields:
 
-All staging tables use:
+* `source_name`
+* `source_endpoint`
+* `status`
+* `run_started_at`
+* `run_finished_at`
+* `records_inserted`
+
+#### `tech.id_management`
+
+Purpose:
+
+* one row per inserted staging record
+* lineage between source record, staging row, and run
+
+### Staging Layer
+
+All staging tables follow the project technical metadata convention:
 
 * `id`
 * `s_ingested_at`
@@ -95,9 +120,16 @@ All staging tables use:
 * `s_run_id`
 * `s_payload`
 
-## What has been loaded into PostgreSQL
+Design principles:
 
-### 1. EONET
+* raw staging first
+* keep source payloads close to origin
+* use business-key deduplication
+* defer business logic to curated views
+
+## 5. Current Source Coverage
+
+### EONET
 
 Loaded into `stg_eonet`:
 
@@ -106,51 +138,32 @@ Loaded into `stg_eonet`:
 * `sources`
 * `layers`
 
-Current dedupe:
-
-* `events` → `event_id`
-* `categories` → `category_id`
-* `sources` → `source_id`
-* `layers` → `(category_id, layer_name)`
-
-### 2. NeoWs
+### NeoWs
 
 Loaded into `stg_neows`:
 
 * `neo_feed`
 * `neo_browse`
-* `neo_lookup` table exists, but operationally it is not essential and is not the main recurring source
+* `neo_lookup`
 
-Current dedupe:
+Operational emphasis:
 
-* `neo_feed` → `(neo_reference_id, close_approach_date, orbiting_body)`
-* `neo_lookup` → `neo_reference_id`
-* `neo_browse` → `neo_reference_id`
+* `neo_feed` is the recurring operational load
+* `neo_browse` is the broader catalog/reference load
 
-Notes:
-
-* `neo_feed` is the main recurring operational load
-* `neo_browse` was used as a large catalog backfill/reference load
-* `neo_browse` was made more robust with per-page commits, retry logic, and fallback handling for missing names
-
-### 3. Exoplanet Archive
+### Exoplanet Archive
 
 Loaded into `stg_exoplanet`:
 
 * `ps`
 * `pscomppars`
 
-Current dedupe:
-
-* `ps` → `pl_name`
-* `pscomppars` → `pl_name`
-
-Operational choice:
+Operational emphasis:
 
 * `pscomppars` is the main scheduled table
-* `ps` is kept as a lower-frequency reference refresh
+* `ps` is a lower-frequency reference refresh
 
-### 4. OSDR
+### OSDR
 
 Loaded into `stg_osdr`:
 
@@ -159,293 +172,276 @@ Loaded into `stg_osdr`:
 * `samples`
 * `files`
 
-Current dedupe:
+## 6. Curated Analytics Layer
 
-* `datasets` → `dataset_accession`
-* `assays` → `assay_accession`
-* `samples` → `sample_accession`
-* `files` → `file_accession`
+The curated analytics layer lives in `dmt_generic`.
 
-Notes:
+This is the layer intended for:
 
-* OSDR required iterative correction because payload shapes were hierarchical and inconsistent across endpoints
-* final working load order is:
+* API consumers
+* dashboards
+* future GenAI or agent use
 
-  1. datasets
-  2. assays
-  3. samples
-  4. files
+It exists so consumers do not need to work directly with raw staging tables or source-shaped JSON fields.
 
-## APIs used and what each does
+### Current Curated Views
 
-### EONET
+#### Platform / operations
 
-Purpose:
+* `v_dmt_ingestion_status`
 
-* Earth Observatory Natural Event Tracker
-* provides natural event data and reference metadata
+#### NeoWs
 
-Used endpoints/data:
+* `v_dmt_neows_daily_summary`
+* `v_dmt_neows_kpis`
 
-* events → natural events feed
-* categories → event categories metadata
-* sources → source system metadata
-* layers → map/layer metadata associated with categories
+#### EONET
 
-Operational use:
+* `v_dmt_eonet_category_summary`
+* `v_dmt_eonet_event_overview`
 
-* lightweight daily refreshes
-* small enough that simple full pulls with dedupe are acceptable
+#### Exoplanet
 
-### NeoWs
+* `v_dmt_exoplanet_discovery_yearly_summary`
+* `v_dmt_exoplanet_discovery_method_summary`
+* `v_dmt_exoplanet_catalog`
 
-Purpose:
+#### OSDR
 
-* Near Earth Object Web Service
-* asteroid / NEO information from NASA
+* `v_dmt_osdr_dataset_summary`
+* `v_dmt_osdr_assay_type_summary`
+* `v_dmt_osdr_dataset_catalog`
 
-Used endpoints/data:
+### Alembic Migrations Added For Analytics
 
-* `neo_feed`
+* `854e4dbf9562_add_dmt_generic_views.py`
+* `c4d5e6f7a8b9_add_eonet_analytics_views.py`
+* `d1e2f3a4b5c6_add_exoplanet_analytics_views.py`
+* `e7f8a9b0c1d2_add_osdr_analytics_views.py`
 
-  * date-window feed of near-Earth objects and close approaches
-  * good for recurring operational ingestion
-* `neo_browse`
+## 7. FastAPI Layer
 
-  * broad paginated catalog of NEOs
-  * good for baseline backfill/reference loading
-* `neo_lookup`
+FastAPI is the controlled access layer over curated data.
 
-  * single-object lookup by asteroid ID
-  * implemented structurally but not central to recurring ingestion
+Implementation style currently used:
 
-Operational use:
+* function-based routes
+* `Depends(get_db)` for DB access
+* a dedicated analytics router in `api/routes/analytics.py`
+* typed response models in `api/schemas.py`
 
-* `neo_feed` scheduled daily
-* `neo_browse` treated as backfill/occasional refresh, not routine daily ingestion
+### Platform Endpoints
 
-### Exoplanet Archive
+* `GET /health/live`
+* `GET /health/ready`
+* `GET /health`
+* `GET /ingestion-runs`
+* `GET /analytics/catalog`
 
-Purpose:
+### Analytics Endpoints
 
-* NASA Exoplanet Archive
-* structured catalog of exoplanet and host system information
+#### Ingestion
 
-Used tables via API/TAP:
+* `GET /analytics/ingestion-status`
 
-* `ps`
+#### NeoWs
 
-  * planetary systems table
-* `pscomppars`
+* `GET /analytics/neows/daily-summary`
+* `GET /analytics/neows/kpis`
 
-  * composite planetary parameters table, operationally the most useful one-row-per-planet style table
+#### EONET
 
-Operational use:
+* `GET /analytics/eonet/category-summary`
+* `GET /analytics/eonet/event-overview`
 
-* `pscomppars` scheduled weekly
-* `ps` scheduled monthly
+Filter/pagination parameters:
 
-### OSDR
+* `limit`
+* `offset`
+* `category_id`
+* `event_status`
 
-Purpose:
+#### Exoplanet
 
-* Open Science Data Repository
-* life sciences / biological & physical sciences metadata and associated files
+* `GET /analytics/exoplanet/discovery-yearly-summary`
+* `GET /analytics/exoplanet/discovery-method-summary`
+* `GET /analytics/exoplanet/catalog`
 
-Loaded hierarchy:
+Filter/pagination parameters:
 
-* datasets
-* assays
-* samples
-* files
+* `limit`
+* `offset`
+* `discovery_method`
+* `disc_year`
 
-Operational use:
+#### OSDR
 
-* `datasets` and `files` scheduled weekly
-* `assays` and `samples` scheduled monthly
+* `GET /analytics/osdr/dataset-summary`
+* `GET /analytics/osdr/assay-type-summary`
+* `GET /analytics/osdr/datasets`
 
-## Ingestor architecture pattern
+Filter/pagination parameters:
 
-Each loader follows the same core pattern:
+* `limit`
+* `offset`
+* `data_source`
+* `dataset_accession`
 
-* call source API
-* create a row in `tech.run_management`
-* insert new rows into staging
-* insert lineage rows into `tech.id_management`
-* mark the run as success or failure
+### API Contract Features
 
-Deduplication is done in staging using:
+Implemented:
 
-* business-key unique constraints
-* `ON CONFLICT DO NOTHING RETURNING id`
+* typed response models
+* OpenAPI registration
+* consistent paginated response wrappers
+* analytics endpoint discovery through `/analytics/catalog`
+* request IDs in responses
+* structured access logging
 
-## FastAPI
+## 8. Health, Auth, And Logging
 
-FastAPI container is running.
+### Health
 
-Current endpoint implemented:
+The API now distinguishes:
 
+* liveness -> process is up
+* readiness -> API can reach PostgreSQL
+
+Routes:
+
+* `/health/live`
+* `/health/ready`
 * `/health`
 
-FastAPI exists mainly as the application/backend layer to expose staged or curated data later.
+### Optional Private Auth
 
-## Scheduling / cron
+Auth is available but can remain disabled for private LAN-only usage.
 
-### Current schedule
+Config flags:
 
-#### Daily
+* `API_REQUIRE_AUTH`
+* `API_AUTH_TOKEN`
 
-* 08:00 `eonet_events`
-* 08:05 `eonet_categories`
-* 08:10 `eonet_sources`
-* 08:15 `eonet_layers`
-* 08:20 `neows_feed`
+Supported auth headers:
 
-#### Weekly, every Monday
+* `X-API-Key`
+* `Authorization: Bearer <token>`
 
-* 08:30 `exoplanet_pscomppars`
-* 09:00 `osdr_datasets`
-* 09:10 `osdr_files`
+### Request Tracing
 
-#### Monthly, on the 1st
+Implemented in `api/main.py`:
 
-* 08:45 `exoplanet_ps`
-* 09:20 `osdr_assays`
-* 09:30 `osdr_samples`
+* inbound `X-Request-ID` reuse if present
+* generated request ID otherwise
+* `X-Request-ID` returned on responses
+* structured access log payload written to stdout
 
-### Scheduling model
+Captured fields include:
 
-* one wrapper script per ingestion job under `scripts/`
-* dedicated cron files under `/etc/cron.d/`
-* newer jobs are silent with `> /dev/null 2>&1`
-* logging is meant to rely on PostgreSQL technical tables, not flat log files
+* `request_id`
+* `method`
+* `path`
+* `status_code`
+* `duration_ms`
 
-## Important logging change
+## 9. Private Dashboard
 
-Originally, project ingestion logs were being written to files under `logs/`, and one of them exceeded GitHub’s 100 MB file limit.
+NASAHub now includes a private dashboard served directly by FastAPI.
 
-Decision taken:
+Routes:
 
-* stop creating ingestion log files
-* no more project log append behavior in wrappers
-* rely on `tech.run_management` and `tech.id_management` for monitoring/auditing
-* `logs/` and `*.log` are ignored in git
+* `GET /dashboard`
+* `GET /` -> redirect to `/dashboard`
+* `/dashboard-assets/*` for static assets
 
-## Git issue resolved
+Implementation approach:
 
-Problem:
+* static `index.html`
+* static `dashboard.css`
+* static `dashboard.js`
+* no Node or frontend build pipeline
 
-* committed logs blocked push because one exceeded GitHub’s file size limit
+This choice was intentional to keep the private admin UI lightweight and easy to operate on the Lenovo.
 
-Fix applied:
+### Dashboard Purpose
 
-* `logs/` and `*.log` added to `.gitignore`
-* git history rewritten with `git filter-repo --force --path logs/ --invert-paths`
-* remote may need re-adding after rewrite
-* push requires force push afterward
+The dashboard is the first consumer of the analytics API.
 
-## Security hardening completed
+It gives the admin a browser-based view of:
 
-### SSH
+* system overview
+* ingestion posture
+* NeoWs signals
+* EONET activity
+* Exoplanet discovery summaries
+* OSDR dataset/assay summaries
+* filtered explorer previews for paginated endpoints
 
-Configured securely:
+### Dashboard Resilience Improvement
 
-* `PasswordAuthentication no`
-* `PermitRootLogin no`
-* `PubkeyAuthentication yes`
+The dashboard originally loaded all sections through one shared fetch batch, which caused one failed endpoint to make the full page look broken.
 
-### Firewall / UFW
+That has been improved so sections now load independently. A single source failure no longer blanks the entire dashboard.
 
-UFW was hardened.
+## 10. Monitoring Model
 
-Inbound SSH is only allowed from:
+NASAHub no longer uses file-based ingestion logging as the primary monitoring mechanism.
 
-* the user’s public IP
-* the Mac’s LAN IP: `192.168.1.14`
+Monitoring now relies on:
 
-Current UFW posture is intentionally minimal.
+* `tech.run_management`
+* `tech.id_management`
+* curated ingestion status views
+* API health/readiness endpoints
+* structured container logs
 
-### Docker / network exposure
+This is an intentional shift away from flat log files and toward PostgreSQL-backed operational visibility.
 
-Originally, many services were published too broadly on `0.0.0.0`.
+## 11. Testing
 
-That was hardened.
+Current analytics/API coverage lives in:
 
-Current exposure model:
+* `tests/test_analytics_routes.py`
 
-* PostgreSQL → bound to `127.0.0.1:5432`
-* FastAPI → intended to remain private unless LAN browser access is explicitly needed later
-* observability/admin services → bound to Lenovo LAN IP `192.168.1.28`
-* Homepage → bound to `192.168.1.28:3005`
+The test suite covers:
 
-### Practical result
+* analytics route registration
+* response model wiring
+* health behavior
+* auth helper behavior
+* analytics catalog behavior
+* pagination contract shape
+* request ID and access-log helpers
+* dashboard file existence
+* view-backed query functions
 
-* services are reachable on home Wi-Fi / home LAN
-* services are not reachable from the public internet
-* PostgreSQL is not exposed to LAN or internet
-* SSH is restricted
-* Homepage is LAN-only
+Run with:
 
-### DBeaver / PostgreSQL access
+```bash
+./.venv/bin/python -m unittest tests.test_analytics_routes
+```
 
-Because PostgreSQL is localhost-bound:
+## 12. Current Operational Summary
 
-* direct LAN DB access no longer works
-* DBeaver must connect via SSH tunnel
+As of this documentation update, NASAHub now has:
 
-DBeaver pattern:
+* raw ingestion across EONET, NeoWs, Exoplanet, and OSDR
+* centralized run and lineage tracking
+* curated analytics views in `dmt_generic`
+* a typed FastAPI analytics layer
+* pagination and filtering on large analytics endpoints
+* analytics endpoint discovery
+* optional API auth
+* request tracing and structured access logs
+* a private dashboard served from the same API service
 
-* DB host: `127.0.0.1`
-* SSH host: Lenovo LAN IP
-* SSH auth: Mac private key, typically `/Users/valentinjoseph/.ssh/id_ed25519`
+## 13. Recommended Next Steps
 
-### Homepage / observability
+Documentation is now aligned with the implemented system.
 
-Homepage links must use LAN URLs, not Docker service names, for browser clickability.
+Natural next steps after this point:
 
-Examples used:
-
-* Grafana → `http://192.168.1.28:3000`
-* Uptime Kuma → `http://192.168.1.28:3001`
-* Dozzle → `http://192.168.1.28:8080`
-* Prometheus → `http://192.168.1.28:9090`
-* Portainer → `https://192.168.1.28:9443`
-
-The obsolete `Pi SSH` entry should be removed.
-
-### Additional security notes
-
-* Grafana admin password was exposed in chat and should be rotated
-* router should have:
-
-  * no port forwarding to Lenovo
-  * no DMZ to Lenovo
-  * ideally UPnP disabled
-
-## Main operational conclusions
-
-* EONET is fully implemented and scheduled daily
-* NeoWs is implemented, with `neo_feed` as the recurring loader and `neo_browse` as backfill/reference
-* Exoplanet is implemented and scheduled at mixed weekly/monthly cadence
-* OSDR is implemented and scheduled at mixed weekly/monthly cadence
-* the ingestion framework pattern is now established across multiple APIs
-* PostgreSQL staging + technical lineage is the core monitoring/audit layer
-* file-based ingestion logs have been intentionally retired
-* the stack is hardened and LAN-only for admin/observability access
-
-## Good next step after this summary
-
-Likely next source:
-
-* CelesTrak / TLE-related ingestion
-
-Candidate staging schema already discussed:
-
-* `stg_celestrak`
-
-Candidate first tables discussed:
-
-* `gp_active`
-* `satcat_active`
-
-This would extend the platform from NASA APIs into orbital tracking/catalog data.
+* improve dashboard UX and source-level navigation
+* add more curated analytics where needed
+* tighten auth if exposure widens
+* prepare the curated API layer for future chat/agent features

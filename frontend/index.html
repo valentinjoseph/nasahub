@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NASAHub Dashboard</title>
+    <link rel="stylesheet" href="/dashboard-assets/dashboard.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div class="hero__content">
+          <p class="eyebrow">Private Lenovo Dashboard</p>
+          <h1>NASAHub Analytics Console</h1>
+          <p class="hero__copy">
+            Curated NASAHub analytics served from the Lenovo, viewed from your MacBook.
+          </p>
+        </div>
+        <div class="hero__controls">
+          <label class="token-box">
+            <span>API Token</span>
+            <input id="api-token" type="password" placeholder="Optional while auth is disabled" />
+          </label>
+          <button id="refresh-all" class="button button--primary">Refresh Dashboard</button>
+          <p id="last-refresh" class="muted">Waiting for first load...</p>
+        </div>
+      </header>
+
+      <main class="dashboard-grid">
+        <section class="panel panel--overview">
+          <div class="panel__head">
+            <h2>System Overview</h2>
+            <p>Health, endpoint coverage, and ingestion posture.</p>
+          </div>
+          <div id="overview-cards" class="metric-grid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head">
+            <h2>Ingestion Status</h2>
+            <p>Latest run state by source and endpoint.</p>
+          </div>
+          <div id="ingestion-status-table" class="table-wrap"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head">
+            <h2>NeoWs Signals</h2>
+            <p>Near-earth object daily activity and key records.</p>
+          </div>
+          <div id="neows-summary" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head">
+            <h2>EONET Activity</h2>
+            <p>Category rollups and current event overview.</p>
+          </div>
+          <div id="eonet-summary" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head">
+            <h2>Exoplanet Discovery</h2>
+            <p>Discovery methods, yearly trend, and a filtered catalog preview.</p>
+          </div>
+          <div id="exoplanet-summary" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head">
+            <h2>OSDR Operations</h2>
+            <p>Dataset relationship counts and catalog snapshot.</p>
+          </div>
+          <div id="osdr-summary" class="stack"></div>
+        </section>
+
+        <section class="panel panel--full">
+          <div class="panel__head">
+            <h2>Explorer</h2>
+            <p>Paginated analytics previews from the private API.</p>
+          </div>
+          <div class="explorer-grid">
+            <article class="explorer-card">
+              <div class="explorer-card__head">
+                <h3>EONET Event Overview</h3>
+                <div class="inline-fields">
+                  <input id="eonet-category" type="text" placeholder="category_id" />
+                  <select id="eonet-status">
+                    <option value="">Any status</option>
+                    <option value="open">open</option>
+                    <option value="closed">closed</option>
+                  </select>
+                  <button data-action="load-eonet" class="button">Load</button>
+                </div>
+              </div>
+              <div id="eonet-explorer" class="table-wrap"></div>
+            </article>
+
+            <article class="explorer-card">
+              <div class="explorer-card__head">
+                <h3>Exoplanet Catalog</h3>
+                <div class="inline-fields">
+                  <input id="exoplanet-method" type="text" placeholder="discovery_method" />
+                  <input id="exoplanet-year" type="number" placeholder="disc_year" />
+                  <button data-action="load-exoplanet" class="button">Load</button>
+                </div>
+              </div>
+              <div id="exoplanet-explorer" class="table-wrap"></div>
+            </article>
+
+            <article class="explorer-card">
+              <div class="explorer-card__head">
+                <h3>OSDR Dataset Catalog</h3>
+                <div class="inline-fields">
+                  <input id="osdr-accession" type="text" placeholder="dataset_accession" />
+                  <input id="osdr-source" type="text" placeholder="data_source" />
+                  <button data-action="load-osdr" class="button">Load</button>
+                </div>
+              </div>
+              <div id="osdr-explorer" class="table-wrap"></div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="loading-template">
+      <div class="loading">Loading...</div>
+    </template>
+
+    <script src="/dashboard-assets/dashboard.js" type="module"></script>
+  </body>
+</html>

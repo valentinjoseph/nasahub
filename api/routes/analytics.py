@@ -3,6 +3,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.schemas import (
+    AnalyticsCatalogResponse,
+    AnalyticsEndpointInfoResponse,
     EonetCategorySummaryResponse,
     EonetEventOverviewPageResponse,
     EonetEventOverviewResponse,
@@ -19,6 +21,86 @@ from api.schemas import (
 from db.deps import get_db
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+ANALYTICS_ENDPOINTS = [
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/ingestion-status",
+        source="tech",
+        summary="Latest ingestion status by source and endpoint.",
+        paginated=False,
+        filters=[],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/neows/daily-summary",
+        source="neows",
+        summary="Daily near-earth object rollups by close approach date.",
+        paginated=False,
+        filters=[],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/neows/kpis",
+        source="neows",
+        summary="Near-earth object key records such as biggest, fastest, and closest.",
+        paginated=False,
+        filters=[],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/eonet/category-summary",
+        source="eonet",
+        summary="Event rollups by EONET category.",
+        paginated=False,
+        filters=[],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/eonet/event-overview",
+        source="eonet",
+        summary="Paginated EONET event overview with category and status filters.",
+        paginated=True,
+        filters=["category_id", "event_status", "limit", "offset"],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/exoplanet/discovery-yearly-summary",
+        source="exoplanet",
+        summary="Discovery counts by year with cumulative totals.",
+        paginated=False,
+        filters=[],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/exoplanet/discovery-method-summary",
+        source="exoplanet",
+        summary="Discovery counts grouped by discovery method.",
+        paginated=False,
+        filters=[],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/exoplanet/catalog",
+        source="exoplanet",
+        summary="Paginated exoplanet catalog with discovery method and year filters.",
+        paginated=True,
+        filters=["discovery_method", "disc_year", "limit", "offset"],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/osdr/dataset-summary",
+        source="osdr",
+        summary="Dataset-level OSDR relationship counts for assays, samples, and files.",
+        paginated=False,
+        filters=[],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/osdr/assay-type-summary",
+        source="osdr",
+        summary="OSDR assay counts grouped by assay type.",
+        paginated=False,
+        filters=[],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/osdr/datasets",
+        source="osdr",
+        summary="Paginated OSDR dataset catalog with basic dataset filters.",
+        paginated=True,
+        filters=["data_source", "dataset_accession", "limit", "offset"],
+    ),
+]
 
 
 def fetch_view_rows(db: Session, query: str) -> list[dict]:
@@ -37,6 +119,11 @@ def fetch_scalar(db: Session, query: str) -> int:
 
 def fetch_scalar_with_params(db: Session, query: str, params: dict) -> int:
     return db.execute(text(query), params).scalar_one()
+
+
+@router.get("/catalog", response_model=AnalyticsCatalogResponse)
+def get_analytics_catalog():
+    return {"endpoints": ANALYTICS_ENDPOINTS}
 
 
 @router.get("/ingestion-status", response_model=list[IngestionStatusResponse])
@@ -347,7 +434,10 @@ def list_exoplanet_catalog(
 ):
     filter_clause = """
         WHERE (CAST(:discovery_method AS text) IS NULL OR c.discovery_method = CAST(:discovery_method AS text))
-          AND (:disc_year IS NULL OR c.disc_year = :disc_year)
+          AND (
+              CAST(:disc_year AS integer) IS NULL
+              OR c.disc_year = CAST(:disc_year AS integer)
+          )
     """
     params = {
         "limit": limit,
