@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from api.routes import analytics_router
 from db.deps import get_db
 from db.models import IngestionRun
 from db.session import engine
@@ -40,3 +41,6 @@ def list_ingestion_runs(db: Session = Depends(get_db)):
         }
         for run in runs
     ]
+
+
+app.include_router(analytics_router)
