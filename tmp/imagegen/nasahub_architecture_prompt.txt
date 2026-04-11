@@ -1,0 +1,26 @@
+Create a polished space-themed architecture illustration for a private platform called NASAHub.
+
+Show a MacBook admin workstation on the left connected by SSH and browser access to a Lenovo M920q server on the right.
+
+Inside the Lenovo server, depict Docker containers for FastAPI and PostgreSQL.
+
+Below PostgreSQL, show layered database zones:
+- tech metadata
+- staging schemas for EONET, NeoWs, Exoplanet, and OSDR
+- a curated dmt_generic analytics layer
+
+From FastAPI, show paths to:
+- a private dashboard
+- an Ask NASAHub retrieval-first agent
+
+Include optional side nodes for:
+- live NASA NeoWs enrichment
+- OpenAI grounded answers
+
+Visual direction:
+- deep blue space tones
+- nebula atmosphere
+- subtle stars
+- crisp infographic composition
+- minimal readable labels
+- no watermark

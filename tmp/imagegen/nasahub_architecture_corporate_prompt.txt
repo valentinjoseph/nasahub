@@ -1,0 +1,24 @@
+Create a cleaner, more corporate architecture diagram for NASAHub.
+
+Scene:
+- White-to-light-blue or very light space-tech background with restrained depth.
+- Minimal, polished enterprise infographic style.
+
+Structure:
+- Left column: NASA APIs as input systems (EONET, NeoWs, Exoplanet Archive, OSDR).
+- Center: one large Lenovo M920q platform block.
+- Inside the Lenovo block, show three zones:
+  1. Tech Metadata and Staging Schemas
+  2. Curated Analytics Layer
+  3. FastAPI, Private Dashboard, Ask NASAHub, OpenAI Grounded Answers
+- Top layer above the main system: Admin Workstation overseeing and connecting to the Lenovo.
+
+Style:
+- very clean corporate diagram
+- subtle blue accents
+- crisp lines
+- understated gradients
+- readable sans-serif labels
+- professional presentation slide quality
+- minimal decorative space elements
+- no watermark

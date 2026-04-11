@@ -1,0 +1,31 @@
+Create a polished architecture illustration for NASAHub with a left-to-right systems flow and a clearer data-ingestion story.
+
+Composition requirements:
+- On the far left, show NASA APIs as distinct source blocks: EONET, NeoWs, Exoplanet Archive, and OSDR.
+- Show data-flow arrows from those NASA API blocks into a large central Lenovo M920q server block.
+- The Lenovo block should be visually dominant and divided into three clear internal sections from left to right:
+  1. Parallel ingestion foundation area with Tech Metadata and Staging Schemas side by side
+  2. Curated Analytics Layer
+  3. Access and intelligence area with FastAPI, Private Dashboard, Ask NASAHub, and OpenAI grounded answers
+- Above the whole architecture, show the Admin Workstation / MacBook area overseeing the platform, visually connected to the Lenovo with SSH, browser, and VS Code Remote SSH style access.
+
+Technical labeling guidance:
+- Tech Metadata
+- Staging Schemas
+- Curated Analytics Layer
+- FastAPI
+- Private Dashboard
+- Ask NASAHub
+- OpenAI Grounded Answers
+- NASA APIs
+- Lenovo M920q Server
+- Admin Workstation
+
+Design direction:
+- space-inspired but clean
+- blue and cyan tones
+- structured infographic look
+- readable labels
+- subtle nebula or stars in the background
+- no watermark
+- professional architecture diagram, not fantasy art

@@ -50,6 +50,56 @@ NASAHub is evolving into a GenAI-ready analytics platform with this flow:
 
 This means NASAHub is no longer just an ingestion project. It is becoming a layered analytics platform.
 
+## 2A. Architecture Schema
+
+### Visual Diagram
+
+![NASAHub architecture illustration](assets/nasahub-architecture.png)
+
+### Logical Diagram
+
+```mermaid
+flowchart LR
+    M[MacBook Air\nAdmin / Dev / Browser]
+    L[Lenovo M920q\nServer runtime]
+    F[FastAPI in Docker]
+    P[PostgreSQL in Docker]
+    T[tech\nrun_management\nid_management]
+    S[staging schemas\nEONET\nNeoWs\nExoplanet\nOSDR]
+    D[dmt_generic\ncurated analytics]
+    UI[Private Dashboard]
+    ASK[Ask NASAHub]
+    LIVE[Live NASA enrichment]
+    LLM[OpenAI grounded generation]
+
+    M -->|SSH, browser| L
+    L --> F
+    L --> P
+    P --> T
+    P --> S
+    S --> D
+    T --> D
+    D --> F
+    F --> UI
+    F --> ASK
+    ASK --> D
+    ASK --> LIVE
+    ASK --> LLM
+```
+
+### Process Flow
+
+1. Wrapper scripts under `scripts/` trigger ingestion jobs on the Lenovo.
+2. Source ingestors load raw data into staging schemas.
+3. Technical metadata is recorded in `tech.run_management` and `tech.id_management`.
+4. Curated analytics views in `dmt_generic` reshape source data into stable analytical datasets.
+5. FastAPI exposes those curated datasets through analytics, detail, and retrieval routes.
+6. The private dashboard consumes the API for overview, exploration, and guided retrieval.
+7. Ask NASAHub uses retrieval-first logic in two modes:
+   * entity mode for known objects, events, or planets
+   * general mode for broad questions across the curated platform
+8. Optional live enrichment and OpenAI-backed grounded answers sit on top of the curated layer, not below it.
+
 ## 3. Repository Structure
 
 Key directories:
@@ -248,11 +298,18 @@ Implementation style currently used:
 
 * `GET /analytics/neows/daily-summary`
 * `GET /analytics/neows/kpis`
+* `GET /analytics/neows/objects`
+* `GET /analytics/neows/object/{neo_reference_id}`
+* `GET /analytics/neows/object/{neo_reference_id}/approaches`
+* `GET /analytics/neows/object/{neo_reference_id}/insight`
+* `GET /analytics/neows/object/{neo_reference_id}/live-enrichment`
 
 #### EONET
 
 * `GET /analytics/eonet/category-summary`
 * `GET /analytics/eonet/event-overview`
+* `GET /analytics/eonet/event/{event_id}`
+* `GET /analytics/eonet/event/{event_id}/insight`
 
 Filter/pagination parameters:
 
@@ -266,6 +323,9 @@ Filter/pagination parameters:
 * `GET /analytics/exoplanet/discovery-yearly-summary`
 * `GET /analytics/exoplanet/discovery-method-summary`
 * `GET /analytics/exoplanet/catalog`
+* `GET /analytics/exoplanet/planets`
+* `GET /analytics/exoplanet/planet/{pl_name}`
+* `GET /analytics/exoplanet/planet/{pl_name}/insight`
 
 Filter/pagination parameters:
 
@@ -279,6 +339,10 @@ Filter/pagination parameters:
 * `GET /analytics/osdr/dataset-summary`
 * `GET /analytics/osdr/assay-type-summary`
 * `GET /analytics/osdr/datasets`
+
+#### Retrieval / agent
+
+* `POST /analytics/ask`
 
 Filter/pagination parameters:
 
@@ -383,6 +447,23 @@ The dashboard originally loaded all sections through one shared fetch batch, whi
 
 That has been improved so sections now load independently. A single source failure no longer blanks the entire dashboard.
 
+### Ask NASAHub
+
+The dashboard now includes a top-level Ask NASAHub panel with:
+
+* `entity` mode for exact record questions
+* `general` mode for broad questions without a required entity ID
+* browser-side conversation memory
+* grounded citations
+* ranked matched entities
+* optional live NeoWs enrichment
+
+Current general retrieval intent coverage:
+
+* NeoWs: biggest, fastest, closest, hazardous
+* EONET: latest, open, category-focused
+* Exoplanet: nearest, largest, newest, discovery-method focused
+
 ## 10. Monitoring Model
 
 NASAHub no longer uses file-based ingestion logging as the primary monitoring mechanism.
@@ -434,6 +515,9 @@ As of this documentation update, NASAHub now has:
 * optional API auth
 * request tracing and structured access logs
 * a private dashboard served from the same API service
+* Ask NASAHub with retrieval-first chat behavior
+* entity and general question modes
+* intent-aware ranking for broad questions
 
 ## 13. Recommended Next Steps
 

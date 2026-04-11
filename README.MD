@@ -73,6 +73,49 @@ NASAHub now has four practical layers:
 4. Access layer
    FastAPI exposes curated analytics endpoints, and a private dashboard consumes those endpoints.
 
+### Architecture Diagram
+
+![NASAHub architecture illustration](docs/assets/nasahub-architecture.png)
+
+```mermaid
+flowchart LR
+    M[MacBook Air\nAdmin, VS Code Remote SSH, Browser]
+    L[Lenovo M920q\nUbuntu Server 24.04]
+    F[FastAPI in Docker\n/analytics, /dashboard, /health, /analytics/ask]
+    P[PostgreSQL in Docker]
+    T[tech schema\nrun_management\nid_management]
+    S[staging schemas\nstg_eonet\nstg_neows\nstg_exoplanet\nstg_osdr]
+    D[dmt_generic\ncurated analytics views]
+    UI[Private Dashboard]
+    A[Ask NASAHub\nentity mode\ngeneral mode]
+    N[Live NASA NeoWs enrichment]
+    O[OpenAI grounded answers]
+
+    M -->|SSH, browser| L
+    L --> F
+    L --> P
+    P --> T
+    P --> S
+    S --> D
+    T --> D
+    D --> F
+    F --> UI
+    F --> A
+    A --> D
+    A --> N
+    A --> O
+```
+
+### Runtime Flow
+
+1. Cron wrappers on the Lenovo trigger source ingestors.
+2. Ingestors load raw source-shaped data into PostgreSQL staging schemas.
+3. `tech.*` tables record run status, inserted rows, and lineage.
+4. `dmt_generic` views reshape raw data into analytics-ready datasets.
+5. FastAPI exposes stable routes for analytics, detail views, and Ask NASAHub retrieval.
+6. The private dashboard uses those endpoints for overview, exploration, and chat-style retrieval.
+7. Ask NASAHub answers from curated NASAHub data first, then optionally enriches with live NASA and OpenAI-backed grounded generation.
+
 ## Repository Structure
 
 ```text
@@ -349,6 +392,8 @@ Implemented and live:
 * request tracing and structured access logs
 * optional API auth layer
 * private dashboard served from FastAPI
+* Ask NASAHub with entity mode and general retrieval mode
+* intent-aware broad-question ranking across NeoWs, EONET, and Exoplanet
 * test coverage for analytics routing and helpers
 
 ## Next Likely Steps

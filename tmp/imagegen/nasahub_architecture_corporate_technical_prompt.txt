@@ -1,0 +1,41 @@
+Create a polished architecture diagram for NASAHub that blends a clean corporate presentation style with stronger technical detail.
+
+Layout:
+- Top: Admin Workstation / MacBook area overseeing the platform.
+- Left: NASA APIs as source systems: EONET, NeoWs, Exoplanet Archive, OSDR.
+- Center: one large Lenovo M920q Platform block.
+- Right: access and intelligence outputs.
+
+Inside the Lenovo platform, show clearly labeled sections:
+1. Ingestion / orchestration area
+   - ingestion scripts
+   - cron wrappers
+2. PostgreSQL data platform area with two parallel layers:
+   - Tech Metadata: tech.run_management, tech.id_management
+   - Staging Schemas: stg_eonet, stg_neows, stg_exoplanet, stg_osdr
+3. Curated Analytics Layer:
+   - dmt_generic views
+4. Access Layer:
+   - FastAPI analytics endpoints
+   - Private Dashboard
+   - Ask NASAHub
+5. Intelligence / enrichment:
+   - OpenAI grounded answers
+   - optional live NASA NeoWs enrichment
+
+Flow requirements:
+- NASA APIs feed into staging schemas.
+- Tech metadata sits alongside staging, not after it.
+- Curated analytics sits after staging.
+- FastAPI, dashboard, and Ask NASAHub sit on top of curated analytics.
+- Ask NASAHub connects to OpenAI grounded answers and optional live enrichment.
+- Admin workstation connects through SSH, browser, and VS Code Remote SSH style access.
+
+Visual direction:
+- cleaner and more corporate than cinematic
+- presentation-ready enterprise infographic
+- white / pale-blue / steel-blue base with subtle space-tech atmosphere
+- highly readable labels
+- crisp boxes and arrows
+- minimal clutter
+- no watermark

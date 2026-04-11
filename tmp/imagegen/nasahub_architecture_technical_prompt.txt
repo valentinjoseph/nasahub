@@ -1,0 +1,26 @@
+Create a more technically accurate systems architecture diagram for NASAHub.
+
+Required structure:
+- Far left: NASA APIs and datasets as source systems: EONET, NeoWs, Exoplanet Archive, OSDR.
+- Arrows from source systems into a large Lenovo M920q server/platform block in the center.
+- Inside the Lenovo block, show these sections clearly:
+  - Ingestion scripts / cron wrappers
+  - PostgreSQL with two parallel storage zones:
+    - Tech Metadata (`tech.run_management`, `tech.id_management`)
+    - Staging Schemas (`stg_eonet`, `stg_neows`, `stg_exoplanet`, `stg_osdr`)
+  - Curated Analytics Layer (`dmt_generic`)
+  - FastAPI service
+  - Private Dashboard
+  - Ask NASAHub retrieval-first agent
+- Show OpenAI grounded answers as connected to Ask NASAHub on the right side.
+- Show optional live NASA NeoWs enrichment as a side enrichment path.
+- Above the entire platform, show the MacBook admin workstation with SSH, browser, and VS Code Remote SSH style management links.
+
+Style requirements:
+- technical architecture diagram
+- highly legible labels
+- more schematic and accurate than cinematic
+- blue/steel palette
+- clean boxes, arrows, and hierarchy
+- subtle dark space-tech background allowed
+- no watermark

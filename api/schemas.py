@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HealthResponse(BaseModel):
@@ -51,6 +51,99 @@ class NeoWsKpiResponse(BaseModel):
     is_hazardous_flag: bool | None
     miss_distance_km: float | None
     value: float | None
+
+
+class NeoWsObjectDetailResponse(BaseModel):
+    neo_reference_id: str
+    name: str
+    nasa_jpl_url: str | None
+    absolute_magnitude_h: float | None
+    is_potentially_hazardous_asteroid: bool | None
+    is_sentry_object: bool | None
+    estimated_diameter_min_km: float | None
+    estimated_diameter_max_km: float | None
+    first_close_approach_date: date | None
+    most_recent_close_approach_date: date | None
+    approach_count: int
+    min_miss_distance_km: float | None
+    max_velocity_kph: float | None
+    latest_orbiting_body: str | None
+    last_ingested_at: datetime | None
+
+
+class NeoWsObjectSearchResultResponse(BaseModel):
+    neo_reference_id: str
+    name: str
+    is_potentially_hazardous_asteroid: bool | None
+    most_recent_close_approach_date: date | None
+    approach_count: int
+
+
+class NeoWsLiveEnrichmentResponse(BaseModel):
+    neo_reference_id: str
+    name: str
+    source: str
+    source_url: str
+    generated_summary: str
+    nasa_jpl_url: str | None
+    absolute_magnitude_h: float | None
+    is_potentially_hazardous_asteroid: bool | None
+    estimated_diameter_min_km: float | None
+    estimated_diameter_max_km: float | None
+    latest_close_approach_date: date | None
+    latest_orbiting_body: str | None
+    latest_relative_velocity_kph: float | None
+    latest_miss_distance_km: float | None
+
+
+class NeoWsApproachItemResponse(BaseModel):
+    close_approach_date: date
+    close_approach_datetime: datetime | None
+    orbiting_body: str
+    relative_velocity_km_per_hour: float | None
+    miss_distance_kilometers: float | None
+    estimated_diameter_max_km: float | None
+    is_potentially_hazardous_asteroid: bool | None
+    s_ingested_at: datetime
+
+
+class NeoWsApproachPageResponse(BaseModel):
+    items: list[NeoWsApproachItemResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class NeoWsInsightResponse(BaseModel):
+    neo_reference_id: str
+    mode: str
+    title: str
+    summary: str
+    sources: list[str]
+
+
+class EonetEventDetailResponse(BaseModel):
+    event_id: str
+    title: str
+    description: str | None
+    link: str | None
+    event_status: str
+    closed_at: datetime | None
+    category_count: int
+    category_titles: str | None
+    source_count: int
+    source_titles: str | None
+    geometry_count: int
+    latest_geometry_at: datetime | None
+    last_ingested_at: datetime
+
+
+class EonetInsightResponse(BaseModel):
+    event_id: str
+    mode: str
+    title: str
+    summary: str
+    sources: list[str]
 
 
 class EonetCategorySummaryResponse(BaseModel):
@@ -124,6 +217,36 @@ class ExoplanetCatalogPageResponse(BaseModel):
     offset: int
 
 
+class ExoplanetPlanetDetailResponse(BaseModel):
+    pl_name: str
+    hostname: str | None
+    discovery_method: str
+    disc_year: int | None
+    disc_facility: str | None
+    sy_dist: float | None
+    pl_orbper: float | None
+    pl_rade: float | None
+    pl_bmasse: float | None
+    st_teff: float | None
+    last_ingested_at: datetime
+
+
+class ExoplanetPlanetSearchResultResponse(BaseModel):
+    pl_name: str
+    hostname: str | None
+    discovery_method: str
+    disc_year: int | None
+    sy_dist: float | None
+
+
+class ExoplanetInsightResponse(BaseModel):
+    pl_name: str
+    mode: str
+    title: str
+    summary: str
+    sources: list[str]
+
+
 class OsdrDatasetSummaryResponse(BaseModel):
     dataset_accession: str
     dataset_label: str
@@ -164,3 +287,50 @@ class OsdrDatasetCatalogPageResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AskNasaHubRequest(BaseModel):
+    mode: str = Field(default="entity", pattern="^(entity|general)$")
+    source: str | None = Field(default=None, pattern="^(general|neows|eonet|exoplanet)$")
+    entity_id: str | None = None
+    question: str
+    include_live_enrichment: bool = False
+    history: list["AskNasaHubMessage"] = Field(default_factory=list)
+
+
+class AskNasaHubMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str
+
+
+class AskNasaHubCitation(BaseModel):
+    source: str
+    title: str
+    entity_id: str | None
+    path: str | None
+    source_url: str | None
+    note: str | None
+
+
+class AskNasaHubMatch(BaseModel):
+    source: str
+    entity_id: str
+    title: str
+    path: str | None
+    note: str | None
+    rank_reason: str | None = None
+    metric_label: str | None = None
+    metric_value: str | None = None
+
+
+class AskNasaHubResponse(BaseModel):
+    mode: str
+    source: str
+    entity_id: str | None
+    question: str
+    model: str
+    answer: str
+    grounded_sources: list[str]
+    citations: list[AskNasaHubCitation]
+    conversation: list[AskNasaHubMessage]
+    matched_entities: list[AskNasaHubMatch]

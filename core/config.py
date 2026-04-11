@@ -20,6 +20,9 @@ API_VERSION = os.getenv("API_VERSION", "0.1.0")
 API_ENABLE_DOCS = env_bool("API_ENABLE_DOCS", True)
 API_REQUIRE_AUTH = env_bool("API_REQUIRE_AUTH", False)
 API_AUTH_TOKEN = os.getenv("API_AUTH_TOKEN")
+NASA_API_KEY = os.getenv("NASA_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 
 DATABASE_URL = (
     f"postgresql+psycopg://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
