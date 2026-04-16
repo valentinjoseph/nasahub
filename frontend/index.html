@@ -34,25 +34,35 @@
           <div class="panel__head">
             <div>
               <h2>View</h2>
-              <p>Filter the dashboard by section group.</p>
+              <p>Move between focused source workspaces instead of loading every panel at once.</p>
             </div>
           </div>
           <div class="tab-row">
-            <button class="button tab-button tab-button--active" data-view="all" type="button">All</button>
-            <button class="button tab-button" data-view="operations" type="button">Operations</button>
-            <button class="button tab-button" data-view="science" type="button">Science</button>
-            <button class="button tab-button" data-view="explorer" type="button">Explorer</button>
+            <button class="button tab-button tab-button--active" data-view="overview" type="button">Overview</button>
+            <button class="button tab-button" data-view="neows" type="button">NeoWs</button>
+            <button class="button tab-button" data-view="eonet" type="button">EONET</button>
+            <button class="button tab-button" data-view="exoplanet" type="button">Exoplanet</button>
+            <button class="button tab-button" data-view="osdr" type="button">OSDR</button>
+            <button class="button tab-button" data-view="workspace" type="button">Ask & Explore</button>
           </div>
+          <div id="dashboard-breadcrumb" class="breadcrumb-bar">Overview / waiting for first selection</div>
         </section>
 
-        <section class="panel panel--full" data-panel-group="explorer">
+        <section class="panel panel--full" data-panel-group="workspace">
           <div class="panel__head">
             <div>
               <h2>Ask NASAHub</h2>
-              <p>Grounded assistant answers backed by curated retrieval and source-specific detail routes.</p>
+              <p>Use the agent workspace for grounded questions, matched entities, and guided follow-up prompts.</p>
             </div>
           </div>
-          <div class="detail-panel detail-panel--nested">
+          <div class="tab-row tab-row--sub">
+            <button class="button tab-button tab-button--active" data-workspace-view="ask" type="button">Assistant</button>
+            <button class="button tab-button" data-workspace-view="neows" type="button">NeoWs Explorer</button>
+            <button class="button tab-button" data-workspace-view="eonet" type="button">EONET Explorer</button>
+            <button class="button tab-button" data-workspace-view="exoplanet" type="button">Exoplanet Explorer</button>
+            <button class="button tab-button" data-workspace-view="osdr" type="button">OSDR Explorer</button>
+          </div>
+          <div class="detail-panel detail-panel--nested" data-workspace-panel="ask">
             <div class="detail-panel__head">
               <div class="inline-fields">
                 <select id="ask-mode">
@@ -66,6 +76,7 @@
                   <option value="exoplanet">Exoplanet</option>
                 </select>
                 <input id="ask-entity-id" type="text" placeholder="entity id or object name" />
+                <input id="ask-comparison-entity-id" type="text" placeholder="compare with (optional)" />
                 <label class="checkbox-line">
                   <input id="ask-include-live" type="checkbox" />
                   <span>Include live NASA enrichment when available</span>
@@ -77,6 +88,16 @@
                 <button id="clear-ask-history" class="button" type="button">Clear conversation</button>
               </div>
             </div>
+            <div id="ask-context-banner" class="summary-panel summary-panel--secondary">
+              No active comparison context yet. Load a record and use the compare helpers to build one.
+            </div>
+            <div class="detail-panel detail-panel--nested">
+              <div class="detail-panel__head">
+                <h3>Suggested Prompts</h3>
+                <div id="ask-suggestion-meta" class="explorer-meta">Prompt suggestions update with source and mode.</div>
+              </div>
+              <div id="ask-suggestion-chips" class="suggestion-chips"></div>
+            </div>
             <div id="ask-nasahub-history" class="chat-thread">
               Conversation history will appear here once you ask a question.
             </div>
@@ -86,7 +107,7 @@
           </div>
         </section>
 
-        <section class="panel panel--overview" data-panel-group="operations">
+        <section class="panel panel--overview" data-panel-group="overview">
           <div class="panel__head">
             <div>
               <h2>System Overview</h2>
@@ -97,7 +118,7 @@
           <div id="overview-cards" class="metric-grid"></div>
         </section>
 
-        <section class="panel" data-panel-group="operations">
+        <section class="panel" data-panel-group="overview">
           <div class="panel__head">
             <div>
               <h2>Ingestion Status</h2>
@@ -108,18 +129,25 @@
           <div id="ingestion-status-table" class="table-wrap"></div>
         </section>
 
-        <section class="panel" data-panel-group="science">
+        <section class="panel panel--full" data-panel-group="neows">
           <div class="panel__head">
             <div>
               <h2>NeoWs Signals</h2>
-              <p>Near-earth object daily activity and key records.</p>
+              <p>Near-Earth object activity, key signals, and a detail workspace for one object at a time.</p>
             </div>
             <span id="status-neows" class="section-badge section-badge--loading">Loading</span>
           </div>
+          <div id="neows-spotlight" class="source-strip"></div>
           <div id="neows-summary" class="stack"></div>
           <div class="detail-panel">
             <div class="detail-panel__head">
-              <h3>NeoWs Object Detail</h3>
+              <div>
+                <h3>NeoWs Object Detail</h3>
+                <p class="panel-copy">Search, summarize, and inspect one object without overwhelming the rest of the page.</p>
+              </div>
+              <button class="button collapsible-toggle" data-collapsible-target="neows-detail-body" data-collapsible-label="NeoWs detail" type="button">Collapse</button>
+            </div>
+            <div id="neows-detail-body" class="detail-panel__body">
               <div class="inline-fields">
                 <input id="neows-object-search" type="text" placeholder="Search by object name or ID" />
                 <button id="find-neows-object" class="button" type="button">Find</button>
@@ -132,81 +160,105 @@
                 <button id="load-neows-object" class="button" type="button">Load object</button>
                 <button id="enrich-neows-object" class="button" type="button">Enrich from live NASA</button>
               </div>
-            </div>
-            <div id="neows-object-meta" class="explorer-meta"></div>
-            <div id="neows-object-summary" class="summary-panel">
-              Choose a NeoWs object to see a short generated summary.
-            </div>
-            <div id="neows-live-enrichment" class="summary-panel summary-panel--secondary">
-              Live NASA enrichment has not been loaded yet.
-            </div>
-            <div class="copilot-panel">
-              <div class="copilot-panel__head">
-                <h3>NeoWs Copilot</h3>
-                <div class="inline-fields">
-                  <button id="neows-insight-overview" class="button" type="button">Explain object</button>
-                  <button id="neows-insight-risk" class="button" type="button">Risk context</button>
-                  <button id="neows-insight-compare" class="button" type="button">Compare local vs live</button>
+              <div class="inline-fields">
+                <button id="neows-use-in-ask" class="button" type="button">Use in Ask NASAHub</button>
+                <button id="neows-use-as-comparison" class="button" type="button">Use as comparison</button>
+              </div>
+              <div id="neows-object-meta" class="explorer-meta"></div>
+              <div id="neows-related-questions" class="suggestion-chips suggestion-chips--context"></div>
+              <div id="neows-object-summary" class="summary-panel">
+                Choose a NeoWs object to see a short generated summary.
+              </div>
+              <div id="neows-live-enrichment" class="summary-panel summary-panel--secondary">
+                Live NASA enrichment has not been loaded yet.
+              </div>
+              <div class="copilot-panel">
+                <div class="copilot-panel__head">
+                  <h3>NeoWs Copilot</h3>
+                  <div class="inline-fields">
+                    <button id="neows-insight-overview" class="button" type="button">Explain object</button>
+                    <button id="neows-insight-risk" class="button" type="button">Risk context</button>
+                    <button id="neows-insight-compare" class="button" type="button">Compare local vs live</button>
+                  </div>
+                </div>
+                <div id="neows-copilot" class="summary-panel summary-panel--secondary">
+                  Choose a NeoWs object to activate the first contextual copilot actions.
                 </div>
               </div>
-              <div id="neows-copilot" class="summary-panel summary-panel--secondary">
-                Choose a NeoWs object to activate the first contextual copilot actions.
-              </div>
-            </div>
-            <div id="neows-object-detail" class="detail-grid"></div>
-            <div class="detail-panel detail-panel--nested">
-              <div class="detail-panel__head">
-                <h3>Close Approach History</h3>
-                <div id="neows-approach-meta" class="explorer-meta"></div>
-              </div>
-              <div id="neows-approach-table" class="table-wrap"></div>
-              <div class="explorer-controls">
-                <button id="neows-approach-prev" class="button" type="button">Previous</button>
-                <button id="neows-approach-next" class="button" type="button">Next</button>
+              <div id="neows-object-detail" class="detail-grid"></div>
+              <div class="detail-panel detail-panel--nested">
+                <div class="detail-panel__head">
+                  <h3>Close Approach History</h3>
+                  <div id="neows-approach-meta" class="explorer-meta"></div>
+                </div>
+                <div id="neows-approach-table" class="table-wrap"></div>
+                <div class="explorer-controls">
+                  <button id="neows-approach-prev" class="button" type="button">Previous</button>
+                  <button id="neows-approach-next" class="button" type="button">Next</button>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="panel" data-panel-group="science">
+        <section class="panel panel--full" data-panel-group="eonet">
           <div class="panel__head">
             <div>
               <h2>EONET Activity</h2>
-              <p>Category rollups and current event overview.</p>
+              <p>Category rollups and a focused event detail lane for operational exploration.</p>
             </div>
             <span id="status-eonet" class="section-badge section-badge--loading">Loading</span>
           </div>
+          <div id="eonet-spotlight" class="source-strip"></div>
           <div id="eonet-summary" class="stack"></div>
           <div class="detail-panel">
             <div class="detail-panel__head">
-              <h3>EONET Event Detail</h3>
+              <div>
+                <h3>EONET Event Detail</h3>
+                <p class="panel-copy">Stay focused on one event, then branch into operational or explanatory questions.</p>
+              </div>
+              <button class="button collapsible-toggle" data-collapsible-target="eonet-detail-body" data-collapsible-label="EONET detail" type="button">Collapse</button>
+            </div>
+            <div id="eonet-detail-body" class="detail-panel__body">
               <div class="inline-fields">
                 <input id="eonet-event-id" type="text" placeholder="event_id" />
                 <button id="load-eonet-detail" class="button" type="button">Load event</button>
                 <button id="eonet-insight-overview" class="button" type="button">Explain event</button>
                 <button id="eonet-insight-operations" class="button" type="button">Operational context</button>
               </div>
+              <div class="inline-fields">
+                <button id="eonet-use-in-ask" class="button" type="button">Use in Ask NASAHub</button>
+                <button id="eonet-use-as-comparison" class="button" type="button">Use as comparison</button>
+              </div>
+              <div id="eonet-detail-meta" class="explorer-meta">Choose an EONET event to view detail.</div>
+              <div id="eonet-related-questions" class="suggestion-chips suggestion-chips--context"></div>
+              <div id="eonet-insight" class="summary-panel summary-panel--secondary">
+                Choose an EONET event to activate contextual guidance.
+              </div>
+              <div id="eonet-detail" class="detail-grid"></div>
             </div>
-            <div id="eonet-detail-meta" class="explorer-meta">Choose an EONET event to view detail.</div>
-            <div id="eonet-insight" class="summary-panel summary-panel--secondary">
-              Choose an EONET event to activate contextual guidance.
-            </div>
-            <div id="eonet-detail" class="detail-grid"></div>
           </div>
         </section>
 
-        <section class="panel" data-panel-group="science">
+        <section class="panel panel--full" data-panel-group="exoplanet">
           <div class="panel__head">
             <div>
               <h2>Exoplanet Discovery</h2>
-              <p>Discovery methods, yearly trend, and a filtered catalog preview.</p>
+              <p>Discovery trends, method breakdowns, and a planet detail path that stays readable.</p>
             </div>
             <span id="status-exoplanet" class="section-badge section-badge--loading">Loading</span>
           </div>
+          <div id="exoplanet-spotlight" class="source-strip"></div>
           <div id="exoplanet-summary" class="stack"></div>
           <div class="detail-panel">
             <div class="detail-panel__head">
-              <h3>Exoplanet Detail</h3>
+              <div>
+                <h3>Exoplanet Detail</h3>
+                <p class="panel-copy">Keep discovery context, science context, and planet facts in one lightweight lane.</p>
+              </div>
+              <button class="button collapsible-toggle" data-collapsible-target="exoplanet-detail-body" data-collapsible-label="Exoplanet detail" type="button">Collapse</button>
+            </div>
+            <div id="exoplanet-detail-body" class="detail-panel__body">
               <div class="inline-fields">
                 <input id="exoplanet-planet-name" type="text" placeholder="planet name" />
                 <button id="find-exoplanet-planet" class="button" type="button">Find</button>
@@ -220,33 +272,59 @@
                 <button id="exoplanet-insight-discovery" class="button" type="button">Discovery context</button>
                 <button id="exoplanet-insight-science" class="button" type="button">Science context</button>
               </div>
+              <div class="inline-fields">
+                <button id="exoplanet-use-in-ask" class="button" type="button">Use in Ask NASAHub</button>
+                <button id="exoplanet-use-as-comparison" class="button" type="button">Use as comparison</button>
+              </div>
+              <div id="exoplanet-detail-meta" class="explorer-meta">Choose an exoplanet to view detail.</div>
+              <div id="exoplanet-related-questions" class="suggestion-chips suggestion-chips--context"></div>
+              <div id="exoplanet-insight" class="summary-panel summary-panel--secondary">
+                Choose an exoplanet to activate contextual guidance.
+              </div>
+              <div id="exoplanet-detail" class="detail-grid"></div>
             </div>
-            <div id="exoplanet-detail-meta" class="explorer-meta">Choose an exoplanet to view detail.</div>
-            <div id="exoplanet-insight" class="summary-panel summary-panel--secondary">
-              Choose an exoplanet to activate contextual guidance.
-            </div>
-            <div id="exoplanet-detail" class="detail-grid"></div>
           </div>
         </section>
 
-        <section class="panel" data-panel-group="science">
+        <section class="panel panel--full" data-panel-group="osdr">
           <div class="panel__head">
             <div>
               <h2>OSDR Operations</h2>
-              <p>Dataset relationship counts and catalog snapshot.</p>
+              <p>Dataset relationship counts and a lighter operational view of the OSDR slice.</p>
             </div>
             <span id="status-osdr" class="section-badge section-badge--loading">Loading</span>
           </div>
+          <div id="osdr-spotlight" class="source-strip"></div>
           <div id="osdr-summary" class="stack"></div>
         </section>
 
-        <section class="panel panel--full" data-panel-group="explorer">
+        <section class="panel panel--full" data-panel-group="workspace" data-workspace-panel="explorers">
           <div class="panel__head">
             <h2>Explorer</h2>
-            <p>Paginated analytics previews from the private API.</p>
+            <p>Use the heavier tables only when you need them, with filters and resets close at hand.</p>
           </div>
           <div class="explorer-grid">
-            <article class="explorer-card">
+            <article class="explorer-card" data-workspace-card="neows">
+              <div class="explorer-card__head">
+                <h3>NeoWs Object Finder</h3>
+                <div class="inline-fields">
+                  <input id="workspace-neows-query" type="text" placeholder="object name or neo_reference_id" />
+                  <button id="workspace-neows-search" class="button" type="button">Find</button>
+                </div>
+                <div class="inline-fields">
+                  <select id="workspace-neows-results">
+                    <option value="">Choose a matching object</option>
+                  </select>
+                  <button id="workspace-neows-load" class="button" type="button">Load detail</button>
+                  <button id="workspace-neows-use" class="button" type="button">Use</button>
+                  <button id="workspace-neows-compare" class="button" type="button">Compare</button>
+                </div>
+                <div id="workspace-neows-meta" class="explorer-meta"></div>
+              </div>
+              <div id="workspace-neows-table" class="table-wrap"></div>
+            </article>
+
+            <article class="explorer-card" data-workspace-card="eonet">
               <div class="explorer-card__head">
                 <h3>EONET Event Overview</h3>
                 <div class="inline-fields">
@@ -259,7 +337,9 @@
                     <option value="closed">closed</option>
                   </select>
                   <button data-action="load-eonet" class="button">Load</button>
+                  <button id="eonet-reset" class="button" type="button">Reset</button>
                 </div>
+                <div id="eonet-active-filters" class="filter-pills"></div>
                 <div id="eonet-explorer-meta" class="explorer-meta"></div>
               </div>
               <div id="eonet-explorer" class="table-wrap"></div>
@@ -269,7 +349,7 @@
               </div>
             </article>
 
-            <article class="explorer-card">
+            <article class="explorer-card" data-workspace-card="exoplanet">
               <div class="explorer-card__head">
                 <h3>Exoplanet Catalog</h3>
                 <div class="inline-fields">
@@ -278,7 +358,9 @@
                   </select>
                   <input id="exoplanet-year" type="number" placeholder="disc_year" />
                   <button data-action="load-exoplanet" class="button">Load</button>
+                  <button id="exoplanet-reset" class="button" type="button">Reset</button>
                 </div>
+                <div id="exoplanet-active-filters" class="filter-pills"></div>
                 <div id="exoplanet-explorer-meta" class="explorer-meta"></div>
               </div>
               <div id="exoplanet-explorer" class="table-wrap"></div>
@@ -288,7 +370,7 @@
               </div>
             </article>
 
-            <article class="explorer-card">
+            <article class="explorer-card" data-workspace-card="osdr">
               <div class="explorer-card__head">
                 <h3>OSDR Dataset Catalog</h3>
                 <div class="inline-fields">
@@ -297,7 +379,9 @@
                     <option value="">Any data source</option>
                   </select>
                   <button data-action="load-osdr" class="button">Load</button>
+                  <button id="osdr-reset" class="button" type="button">Reset</button>
                 </div>
+                <div id="osdr-active-filters" class="filter-pills"></div>
                 <div id="osdr-explorer-meta" class="explorer-meta"></div>
               </div>
               <div id="osdr-explorer" class="table-wrap"></div>

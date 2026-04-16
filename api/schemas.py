@@ -293,6 +293,7 @@ class AskNasaHubRequest(BaseModel):
     mode: str = Field(default="entity", pattern="^(entity|general)$")
     source: str | None = Field(default=None, pattern="^(general|neows|eonet|exoplanet)$")
     entity_id: str | None = None
+    comparison_entity_id: str | None = None
     question: str
     include_live_enrichment: bool = False
     history: list["AskNasaHubMessage"] = Field(default_factory=list)
@@ -327,6 +328,7 @@ class AskNasaHubResponse(BaseModel):
     mode: str
     source: str
     entity_id: str | None
+    comparison_entity_id: str | None = None
     question: str
     model: str
     answer: str

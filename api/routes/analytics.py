@@ -1332,6 +1332,148 @@ def build_general_context(payload: AskNasaHubRequest, db: Session) -> tuple[str,
     return "general", context_payload, grounded_sources, citations, matched_entities
 
 
+def build_entity_comparison_context(payload: AskNasaHubRequest, db: Session) -> tuple[dict, list[str], list[dict], list[dict]]:
+    comparison_entity_id = payload.comparison_entity_id
+    if not comparison_entity_id or comparison_entity_id == payload.entity_id:
+        raise HTTPException(status_code=400, detail="Comparison mode requires a different comparison_entity_id")
+
+    if payload.source == "neows":
+        primary = fetch_neows_object_detail_row(db, payload.entity_id)
+        comparison = fetch_neows_object_detail_row(db, comparison_entity_id)
+        if primary is None or primary["neo_reference_id"] is None:
+            raise HTTPException(status_code=404, detail="Primary NeoWs object not found")
+        if comparison is None or comparison["neo_reference_id"] is None:
+            raise HTTPException(status_code=404, detail="Comparison NeoWs object not found")
+        context_payload = {
+            "comparison_type": "entity_comparison",
+            "primary_detail": primary,
+            "comparison_detail": comparison,
+            "comparison_summary": {
+                "larger_estimated_max_km": primary["name"]
+                if (primary.get("estimated_diameter_max_km") or -1) >= (comparison.get("estimated_diameter_max_km") or -1)
+                else comparison["name"],
+                "closer_min_miss_km": primary["name"]
+                if primary.get("min_miss_distance_km") is not None
+                and (
+                    comparison.get("min_miss_distance_km") is None
+                    or primary["min_miss_distance_km"] <= comparison["min_miss_distance_km"]
+                )
+                else comparison["name"],
+                "faster_max_velocity_kph": primary["name"]
+                if (primary.get("max_velocity_kph") or -1) >= (comparison.get("max_velocity_kph") or -1)
+                else comparison["name"],
+            },
+        }
+        citations = build_ask_citations("neows", payload.entity_id, payload.include_live_enrichment, None) + build_ask_citations(
+            "neows", comparison_entity_id, False, None
+        )
+        matched_entities = [
+            AskNasaHubMatch(
+                source="neows",
+                entity_id=payload.entity_id,
+                title=primary["name"],
+                path=f"/analytics/neows/object/{payload.entity_id}",
+                note="Primary NeoWs object selected for comparison.",
+            ).model_dump(),
+            AskNasaHubMatch(
+                source="neows",
+                entity_id=comparison_entity_id,
+                title=comparison["name"],
+                path=f"/analytics/neows/object/{comparison_entity_id}",
+                note="Comparison NeoWs object selected for comparison.",
+            ).model_dump(),
+        ]
+        return context_payload, ["nasahub_local"], citations, matched_entities
+
+    if payload.source == "eonet":
+        primary = fetch_eonet_event_detail_row(db, payload.entity_id)
+        comparison = fetch_eonet_event_detail_row(db, comparison_entity_id)
+        if primary is None:
+            raise HTTPException(status_code=404, detail="Primary EONET event not found")
+        if comparison is None:
+            raise HTTPException(status_code=404, detail="Comparison EONET event not found")
+        context_payload = {
+            "comparison_type": "entity_comparison",
+            "primary_detail": primary,
+            "comparison_detail": comparison,
+            "comparison_summary": {
+                "more_active_event": primary["title"]
+                if (primary.get("geometry_count") or -1) >= (comparison.get("geometry_count") or -1)
+                else comparison["title"],
+                "open_events": [
+                    event["title"]
+                    for event in (primary, comparison)
+                    if event.get("event_status") == "open"
+                ],
+            },
+        }
+        citations = build_ask_citations("eonet", payload.entity_id, False, None) + build_ask_citations(
+            "eonet", comparison_entity_id, False, None
+        )
+        matched_entities = [
+            AskNasaHubMatch(
+                source="eonet",
+                entity_id=payload.entity_id,
+                title=primary["title"],
+                path=f"/analytics/eonet/event/{payload.entity_id}",
+                note="Primary EONET event selected for comparison.",
+            ).model_dump(),
+            AskNasaHubMatch(
+                source="eonet",
+                entity_id=comparison_entity_id,
+                title=comparison["title"],
+                path=f"/analytics/eonet/event/{comparison_entity_id}",
+                note="Comparison EONET event selected for comparison.",
+            ).model_dump(),
+        ]
+        return context_payload, ["nasahub_local"], citations, matched_entities
+
+    primary = fetch_exoplanet_planet_detail_row(db, payload.entity_id)
+    comparison = fetch_exoplanet_planet_detail_row(db, comparison_entity_id)
+    if primary is None:
+        raise HTTPException(status_code=404, detail="Primary exoplanet not found")
+    if comparison is None:
+        raise HTTPException(status_code=404, detail="Comparison exoplanet not found")
+    context_payload = {
+        "comparison_type": "entity_comparison",
+        "primary_detail": primary,
+        "comparison_detail": comparison,
+        "comparison_summary": {
+            "closer_planet": primary["pl_name"]
+            if primary.get("sy_dist") is not None
+            and (comparison.get("sy_dist") is None or primary["sy_dist"] <= comparison["sy_dist"])
+            else comparison["pl_name"],
+            "larger_radius_planet": primary["pl_name"]
+            if (primary.get("pl_rade") or -1) >= (comparison.get("pl_rade") or -1)
+            else comparison["pl_name"],
+            "earlier_discovery": primary["pl_name"]
+            if primary.get("disc_year") is not None
+            and (comparison.get("disc_year") is None or primary["disc_year"] <= comparison["disc_year"])
+            else comparison["pl_name"],
+        },
+    }
+    citations = build_ask_citations("exoplanet", payload.entity_id, False, None) + build_ask_citations(
+        "exoplanet", comparison_entity_id, False, None
+    )
+    matched_entities = [
+        AskNasaHubMatch(
+            source="exoplanet",
+            entity_id=payload.entity_id,
+            title=primary["pl_name"],
+            path=f"/analytics/exoplanet/planet/{requests.utils.quote(payload.entity_id, safe='')}",
+            note="Primary exoplanet selected for comparison.",
+        ).model_dump(),
+        AskNasaHubMatch(
+            source="exoplanet",
+            entity_id=comparison_entity_id,
+            title=comparison["pl_name"],
+            path=f"/analytics/exoplanet/planet/{requests.utils.quote(comparison_entity_id, safe='')}",
+            note="Comparison exoplanet selected for comparison.",
+        ).model_dump(),
+    ]
+    return context_payload, ["nasahub_local"], citations, matched_entities
+
+
 def call_openai_grounded_answer(
     source: str,
     entity_id: str,
@@ -2019,11 +2161,14 @@ def ask_nasahub(payload: AskNasaHubRequest, db: Session = Depends(get_db)):
     citations: list[dict] = []
     resolved_source = payload.source or "general"
     context_entity_id = payload.entity_id
+    comparison_entity_id = payload.comparison_entity_id
     if payload.mode == "general":
         resolved_source, context_payload, grounded_sources, citations, matched_entities = build_general_context(
             payload,
             db,
         )
+    elif payload.comparison_entity_id:
+        context_payload, grounded_sources, citations, matched_entities = build_entity_comparison_context(payload, db)
     elif payload.source == "neows":
         detail = fetch_neows_object_detail_row(db, payload.entity_id)
         if detail is None or detail["neo_reference_id"] is None:
@@ -2119,6 +2264,7 @@ def ask_nasahub(payload: AskNasaHubRequest, db: Session = Depends(get_db)):
         "mode": payload.mode,
         "source": resolved_source,
         "entity_id": context_entity_id,
+        "comparison_entity_id": comparison_entity_id,
         "question": payload.question,
         "model": OPENAI_MODEL,
         "answer": answer,

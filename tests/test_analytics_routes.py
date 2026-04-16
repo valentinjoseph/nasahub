@@ -1133,6 +1133,73 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
         self.assertEqual(exc_info.exception.status_code, 400)
         self.assertEqual(exc_info.exception.detail, "Entity mode requires entity_id")
 
+    def test_ask_nasahub_entity_comparison_returns_grounded_answer(self):
+        rows = [
+            {
+                "pl_name": "Kepler-22 b",
+                "hostname": "Kepler-22",
+                "discovery_method": "Transit",
+                "disc_year": 2011,
+                "disc_facility": "Kepler",
+                "sy_dist": 195.4,
+                "pl_orbper": 289.9,
+                "pl_rade": 2.4,
+                "pl_bmasse": None,
+                "st_teff": 5518.0,
+                "last_ingested_at": datetime(2026, 4, 10, 18, 0, tzinfo=timezone.utc),
+            },
+            {
+                "pl_name": "Proxima Cen b",
+                "hostname": "Proxima Centauri",
+                "discovery_method": "Radial Velocity",
+                "disc_year": 2016,
+                "disc_facility": "ESO",
+                "sy_dist": 1.3,
+                "pl_orbper": 11.2,
+                "pl_rade": 1.1,
+                "pl_bmasse": 1.27,
+                "st_teff": 3042.0,
+                "last_ingested_at": datetime(2026, 4, 10, 18, 0, tzinfo=timezone.utc),
+            },
+        ]
+        db = FakeSession(rows=rows)
+
+        with patch("api.routes.analytics.call_openai_grounded_answer", return_value="Comparison grounded answer"):
+            response = ask_nasahub(
+                payload=AskNasaHubRequest(
+                    mode="entity",
+                    source="exoplanet",
+                    entity_id="Kepler-22 b",
+                    comparison_entity_id="Proxima Cen b",
+                    question="Compare these two planets",
+                ),
+                db=db,
+            )
+
+        self.assertEqual(response["answer"], "Comparison grounded answer")
+        self.assertEqual(response["source"], "exoplanet")
+        self.assertEqual(response["entity_id"], "Kepler-22 b")
+        self.assertEqual(response["comparison_entity_id"], "Proxima Cen b")
+        self.assertEqual(len(response["matched_entities"]), 2)
+
+    def test_ask_nasahub_entity_comparison_requires_different_entity(self):
+        db = FakeSession()
+
+        with self.assertRaises(HTTPException) as exc_info:
+            ask_nasahub(
+                payload=AskNasaHubRequest(
+                    mode="entity",
+                    source="neows",
+                    entity_id="3542519",
+                    comparison_entity_id="3542519",
+                    question="Compare these two objects",
+                ),
+                db=db,
+            )
+
+        self.assertEqual(exc_info.exception.status_code, 400)
+        self.assertEqual(exc_info.exception.detail, "Comparison mode requires a different comparison_entity_id")
+
     def test_list_osdr_dataset_summary_returns_rows_from_view(self):
         rows = [
             {
