@@ -1,0 +1,9 @@
+# NASAHub managed jobs
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# PostgreSQL backup once per day at 02:30
+30 2 * * * /home/hl-lenovo/projects/nasahub/scripts/run_postgres_backup.sh >> /home/hl-lenovo/projects/nasahub/backups/postgres/backup.log 2>&1
+
+# Health, public readiness, backup freshness, and certificate checks every 15 minutes
+*/15 * * * * /bin/bash /home/hl-lenovo/projects/nasahub/scripts/check_nasahub_health.sh >> /home/hl-lenovo/projects/nasahub/backups/postgres/monitor.log 2>&1

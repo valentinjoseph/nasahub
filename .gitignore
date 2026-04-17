@@ -1,6 +1,10 @@
 logs/
 *.log
 .env
+infra/.env
+*.pem
+*.key
+backups/
 __pycache__/
 *.py[cod]
 .pytest_cache/

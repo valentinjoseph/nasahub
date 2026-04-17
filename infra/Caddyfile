@@ -1,0 +1,35 @@
+{
+    email admin@{$NASAHUB_PUBLIC_HOST:nasahub.cloud}
+}
+
+(nasahub_common) {
+    encode zstd gzip
+
+    @docs path /docs /docs/* /redoc /redoc/* /openapi.json /openapi.json/*
+    respond @docs 404
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "interest-cohort=()"
+        X-Robots-Tag "noindex, nofollow, noarchive"
+        -Server
+    }
+
+    reverse_proxy api:8000
+}
+
+{$NASAHUB_PUBLIC_HOST:nasahub.cloud}, www.{$NASAHUB_PUBLIC_HOST:nasahub.cloud} {
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Security-Policy "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Resource-Policy "same-origin"
+    }
+    import nasahub_common
+}
+
+http://{$NASAHUB_BIND_IP:192.168.1.28} {
+    import nasahub_common
+}

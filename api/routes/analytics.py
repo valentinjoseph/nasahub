@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 import requests
@@ -25,6 +27,8 @@ from api.schemas import (
     ExoplanetPlanetDetailResponse,
     ExoplanetPlanetSearchResultResponse,
     IngestionStatusResponse,
+    MonitorCategoryStatusResponse,
+    MonitorStatusResponse,
     NeoWsApproachPageResponse,
     NeoWsDailySummaryResponse,
     NeoWsInsightResponse,
@@ -35,19 +39,31 @@ from api.schemas import (
     OsdrAssayTypeSummaryResponse,
     OsdrDatasetCatalogPageResponse,
     OsdrDatasetSummaryResponse,
+    PinnedEntityRequest,
+    PinnedEntityResponse,
+    SavedAskContextRequest,
+    SavedAskContextResponse,
 )
-from core.config import NASA_API_KEY, OPENAI_API_KEY, OPENAI_MODEL
+from core.config import MONITOR_STATUS_FILE, NASA_API_KEY, OPENAI_API_KEY, OPENAI_MODEL
 from db.deps import get_db
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 NEOWS_LOOKUP_URL = "https://api.nasa.gov/neo/rest/v1/neo"
+MONITOR_STATUS_CATEGORIES = ("platform", "public", "backup", "ingestion", "certificate")
 
 ANALYTICS_ENDPOINTS = [
     AnalyticsEndpointInfoResponse(
         path="/analytics/ingestion-status",
         source="tech",
         summary="Latest ingestion status by source and endpoint.",
+        paginated=False,
+        filters=[],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/monitor-status",
+        source="tech",
+        summary="Latest categorized status emitted by the NASAHub monitoring script.",
         paginated=False,
         filters=[],
     ),
@@ -198,6 +214,20 @@ ANALYTICS_ENDPOINTS = [
         paginated=False,
         filters=[],
     ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/saved-contexts",
+        source="assistant",
+        summary="Persisted Ask NASAHub contexts stored on the Lenovo for reuse across sessions.",
+        paginated=False,
+        filters=[],
+    ),
+    AnalyticsEndpointInfoResponse(
+        path="/analytics/pins",
+        source="assistant",
+        summary="Pinned entities and watchlist items stored on the Lenovo for reuse across sessions.",
+        paginated=False,
+        filters=[],
+    ),
 ]
 
 
@@ -329,6 +359,233 @@ def fetch_neows_object_detail_row(db: Session, neo_reference_id: str) -> dict | 
 @router.get("/catalog", response_model=AnalyticsCatalogResponse)
 def get_analytics_catalog():
     return {"endpoints": ANALYTICS_ENDPOINTS}
+
+
+@router.get("/monitor-status", response_model=MonitorStatusResponse)
+def get_monitor_status():
+    categories = {
+        category: MonitorCategoryStatusResponse(issue_count=0, issues=[])
+        for category in MONITOR_STATUS_CATEGORIES
+    }
+    status_path = Path(MONITOR_STATUS_FILE)
+    if not status_path.exists():
+        return MonitorStatusResponse(
+            checked_at_utc=None,
+            overall_status="unknown",
+            issue_count=0,
+            source="check_nasahub_health.sh",
+            categories=categories,
+        )
+
+    try:
+        payload = json.loads(status_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        categories["platform"] = MonitorCategoryStatusResponse(
+            issue_count=1,
+            issues=["Latest monitor status file could not be read."],
+        )
+        return MonitorStatusResponse(
+            checked_at_utc=None,
+            overall_status="degraded",
+            issue_count=1,
+            source="check_nasahub_health.sh",
+            categories=categories,
+        )
+
+    for category in MONITOR_STATUS_CATEGORIES:
+        raw_category = payload.get("categories", {}).get(category, {})
+        issues = [str(issue) for issue in raw_category.get("issues", []) if str(issue).strip()]
+        categories[category] = MonitorCategoryStatusResponse(
+            issue_count=int(raw_category.get("issue_count", len(issues))),
+            issues=issues,
+        )
+
+    return MonitorStatusResponse(
+        checked_at_utc=payload.get("checked_at_utc"),
+        overall_status=str(payload.get("overall_status", "unknown")),
+        issue_count=int(payload.get("issue_count", sum(item.issue_count for item in categories.values()))),
+        source=str(payload.get("source", "check_nasahub_health.sh")),
+        categories=categories,
+    )
+
+
+@router.get("/saved-contexts", response_model=list[SavedAskContextResponse])
+def list_saved_contexts(db: Session = Depends(get_db)):
+    return fetch_view_rows(
+        db,
+        """
+        SELECT
+            context_id,
+            label,
+            mode,
+            source,
+            entity_id,
+            comparison_entity_id,
+            question,
+            include_live_enrichment,
+            created_at,
+            updated_at
+        FROM tech.saved_ask_contexts
+        ORDER BY updated_at DESC, created_at DESC
+        """,
+    )
+
+
+@router.post("/saved-contexts", response_model=SavedAskContextResponse)
+def create_saved_context(payload: SavedAskContextRequest, db: Session = Depends(get_db)):
+    context_id = str(uuid4())
+    row = fetch_one_row_with_params(
+        db,
+        """
+        INSERT INTO tech.saved_ask_contexts (
+            context_id,
+            label,
+            mode,
+            source,
+            entity_id,
+            comparison_entity_id,
+            question,
+            include_live_enrichment
+        )
+        VALUES (
+            :context_id,
+            :label,
+            :mode,
+            :source,
+            :entity_id,
+            :comparison_entity_id,
+            :question,
+            :include_live_enrichment
+        )
+        RETURNING
+            context_id,
+            label,
+            mode,
+            source,
+            entity_id,
+            comparison_entity_id,
+            question,
+            include_live_enrichment,
+            created_at,
+            updated_at
+        """,
+        {
+            "context_id": context_id,
+            "label": payload.label,
+            "mode": payload.mode,
+            "source": payload.source,
+            "entity_id": payload.entity_id,
+            "comparison_entity_id": payload.comparison_entity_id,
+            "question": payload.question,
+            "include_live_enrichment": payload.include_live_enrichment,
+        },
+    )
+    if row is None:
+        raise HTTPException(status_code=500, detail="Failed to persist saved context")
+    db.commit()
+    return row
+
+
+@router.get("/pins", response_model=list[PinnedEntityResponse])
+def list_pins(db: Session = Depends(get_db)):
+    return fetch_view_rows(
+        db,
+        """
+        SELECT
+            pin_id,
+            source,
+            entity_id,
+            label,
+            watchlist,
+            created_at,
+            updated_at
+        FROM tech.pinned_entities
+        ORDER BY updated_at DESC, created_at DESC
+        """,
+    )
+
+
+@router.post("/pins", response_model=PinnedEntityResponse)
+def create_pin(payload: PinnedEntityRequest, db: Session = Depends(get_db)):
+    pin_id = str(uuid4())
+    row = fetch_one_row_with_params(
+        db,
+        """
+        INSERT INTO tech.pinned_entities (
+            pin_id,
+            source,
+            entity_id,
+            label,
+            watchlist
+        )
+        VALUES (
+            :pin_id,
+            :source,
+            :entity_id,
+            :label,
+            :watchlist
+        )
+        RETURNING
+            pin_id,
+            source,
+            entity_id,
+            label,
+            watchlist,
+            created_at,
+            updated_at
+        """,
+        {
+            "pin_id": pin_id,
+            "source": payload.source,
+            "entity_id": payload.entity_id,
+            "label": payload.label,
+            "watchlist": payload.watchlist,
+        },
+    )
+    if row is None:
+        raise HTTPException(status_code=500, detail="Failed to persist pin")
+    db.commit()
+    return row
+
+
+@router.delete("/saved-contexts/{context_id}")
+def delete_saved_context(context_id: str, db: Session = Depends(get_db)):
+    deleted = fetch_scalar_with_params(
+        db,
+        """
+        WITH deleted AS (
+            DELETE FROM tech.saved_ask_contexts
+            WHERE context_id = :context_id
+            RETURNING 1
+        )
+        SELECT COUNT(*) FROM deleted
+        """,
+        {"context_id": context_id},
+    )
+    db.commit()
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="Saved context not found")
+    return {"deleted": True, "context_id": context_id}
+
+
+@router.delete("/pins/{pin_id}")
+def delete_pin(pin_id: str, db: Session = Depends(get_db)):
+    deleted = fetch_scalar_with_params(
+        db,
+        """
+        WITH deleted AS (
+            DELETE FROM tech.pinned_entities
+            WHERE pin_id = :pin_id
+            RETURNING 1
+        )
+        SELECT COUNT(*) FROM deleted
+        """,
+        {"pin_id": pin_id},
+    )
+    db.commit()
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="Pinned entity not found")
+    return {"deleted": True, "pin_id": pin_id}
 
 
 @router.get("/ingestion-status", response_model=list[IngestionStatusResponse])

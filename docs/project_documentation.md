@@ -122,6 +122,136 @@ Important implementation files:
 * `core/config.py`
 * `tests/test_analytics_routes.py`
 
+## 3A. Backup And Restore Operations
+
+NASAHub now includes a first operational backup layer for PostgreSQL.
+
+### Backup
+
+Script:
+
+* [`run_postgres_backup.sh`](/home/hl-lenovo/projects/nasahub/scripts/run_postgres_backup.sh)
+
+Behavior:
+
+* loads configuration from [`infra/.env`](/home/hl-lenovo/projects/nasahub/infra/.env)
+* performs a `pg_dump --format=custom` from the `nasahub-postgres` container
+* writes dumps into a timestamped directory
+* writes `metadata.json` beside the dump
+* prunes old backup directories using retention days
+
+Default location:
+
+* `/home/hl-lenovo/projects/nasahub/backups/postgres`
+
+### Restore
+
+Script:
+
+* [`restore_postgres_backup.sh`](/home/hl-lenovo/projects/nasahub/scripts/restore_postgres_backup.sh)
+
+Behavior:
+
+* requires an explicit backup path
+* prompts for a typed confirmation before continuing
+* restores through `pg_restore --clean --if-exists`
+
+### Backup Configuration
+
+Expected environment variables:
+
+* `BACKUP_ROOT`
+* `BACKUP_RETENTION_DAYS`
+
+Template values are documented in [`infra/.env.example`](/home/hl-lenovo/projects/nasahub/infra/.env.example).
+
+### Recommended Next Operational Step
+
+The current implementation is a good first safety layer, but the platform should next add:
+
+* scheduled cron execution on the Lenovo
+* off-device backup copies
+* a tested restore drill
+
+## 3B. Monitoring And Alerting Operations
+
+NASAHub now includes a first operational monitoring script for the public Lenovo-hosted deployment.
+
+### Monitoring Script
+
+Script:
+
+* [`check_nasahub_health.sh`](/home/hl-lenovo/projects/nasahub/scripts/check_nasahub_health.sh)
+
+Behavior:
+
+* verifies the main Docker containers are running
+* checks local API readiness
+* checks public domain readiness
+* verifies PostgreSQL backup freshness
+* verifies latest per-endpoint ingestion status and freshness from `tech.run_management`
+* checks certificate lifetime for the public host
+* optionally posts a JSON alert payload to a configured webhook
+* writes the latest monitor snapshot to `MONITOR_STATUS_FILE` for dashboard/API consumption
+
+The script groups monitoring output into five categories:
+
+* platform health
+* public availability
+* backup safety
+* ingestion freshness
+* certificate status
+
+### Monitoring Configuration
+
+Supported environment variables:
+
+* `MONITOR_PUBLIC_BASE_URL`
+* `MONITOR_LOCAL_READY_URL`
+* `MONITOR_PUBLIC_READY_URL`
+* `MONITOR_TIMEOUT_SECONDS`
+* `MONITOR_BACKUP_MAX_AGE_HOURS`
+* `MONITOR_CERT_MIN_DAYS`
+* `MONITOR_RUN_MAX_AGE_HOURS`
+* source-aware run freshness overrides such as:
+  * `MONITOR_RUN_MAX_AGE_HOURS_EONET_EVENTS`
+  * `MONITOR_RUN_MAX_AGE_HOURS_NEOWS_NEO_FEED`
+  * `MONITOR_RUN_MAX_AGE_HOURS_EXOPLANET_PSCOMPPARS`
+  * `MONITOR_RUN_MAX_AGE_HOURS_OSDR_FILES`
+* `MONITOR_ALERT_WEBHOOK_URL`
+
+Template values are documented in [`infra/.env.example`](/home/hl-lenovo/projects/nasahub/infra/.env.example).
+
+Run freshness is intentionally source-aware:
+
+* fast operational feeds such as EONET and `neows/neo_feed` use tighter thresholds
+* broader catalog/reference loads such as `neo_browse`, `neo_lookup`, `exoplanet/ps`, and slower OSDR entities use looser thresholds
+* `MONITOR_RUN_MAX_AGE_HOURS` remains the fallback for any endpoint that does not have an explicit override
+
+### Operational Use
+
+Recommended baseline:
+
+* scheduled backup job once per day
+* scheduled monitoring check every 15 minutes
+* public readiness check through `nasahub.cloud`
+* webhook alerting if a simple notification endpoint is available
+
+### Managed Cron Wiring
+
+NASAHub now includes a managed cron template and installer:
+
+* [`nasahub.crontab`](/home/hl-lenovo/projects/nasahub/infra/nasahub.crontab)
+* [`install_nasahub_cron.sh`](/home/hl-lenovo/projects/nasahub/scripts/install_nasahub_cron.sh)
+
+This installer:
+
+* keeps unrelated user crontab entries intact
+* replaces only the NASAHub-managed block
+* installs the current operational baseline:
+  * daily PostgreSQL backup
+  * 15-minute monitoring checks
+
 ## 4. Database Architecture
 
 ### Schemas

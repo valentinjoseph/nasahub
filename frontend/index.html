@@ -10,15 +10,18 @@
     <div class="app-shell">
       <header class="hero">
         <div class="hero__content">
-          <p class="eyebrow">Private Lenovo Dashboard</p>
+          <p class="eyebrow">NASAHub control surface</p>
           <h1>NASAHub Analytics Console</h1>
           <p class="hero__copy">
-            Curated NASAHub analytics served from the Lenovo, viewed from your MacBook.
+            Curated analytics, operational monitoring, and the Ask NASAHub workspace running from the Lenovo and published through nasahub.cloud.
           </p>
         </div>
         <div class="hero__controls">
           <div class="hero__status-row">
             <span id="api-mode-indicator" class="section-badge section-badge--loading">Guest mode</span>
+          </div>
+          <div id="mode-banner" class="mode-banner mode-banner--guest">
+            Guest mode: open NASAHub through the public viewer flow or add your admin token to unlock shared Lenovo-backed state.
           </div>
           <label class="token-box">
             <span>API Token</span>
@@ -28,6 +31,37 @@
           <p id="last-refresh" class="muted">Waiting for first load...</p>
         </div>
       </header>
+
+      <section class="panel panel--full panel--welcome">
+        <div class="panel__head">
+          <div>
+            <h2>How To Use NASAHub</h2>
+            <p>One quick orientation before you dive into the data and the agent workspace.</p>
+          </div>
+        </div>
+          <div class="source-strip source-strip--welcome">
+            <article class="source-chip">
+              <div class="source-chip__label">Overview</div>
+              <div class="source-chip__value">Check system health</div>
+            <div class="source-chip__sub">Use this first to confirm readiness, freshness, and ingestion status.</div>
+          </article>
+          <article class="source-chip">
+            <div class="source-chip__label">Explore</div>
+            <div class="source-chip__value">Drill into one source</div>
+            <div class="source-chip__sub">NeoWs, EONET, Exoplanet, and OSDR each have their own focused workspace.</div>
+          </article>
+            <article class="source-chip">
+              <div class="source-chip__label">Ask NASAHub</div>
+              <div class="source-chip__value">Start with guided prompts</div>
+              <div class="source-chip__sub">Use the assistant for broad questions, source-aware comparisons, and grounded follow-up analysis.</div>
+            </article>
+            <article class="source-chip">
+              <div class="source-chip__label">Saved work</div>
+              <div class="source-chip__value">Know where it lives</div>
+            <div class="source-chip__sub">Admin mode saves on the Lenovo. Viewer mode keeps your shelf private in this browser.</div>
+          </article>
+        </div>
+      </section>
 
       <main class="dashboard-grid">
         <section class="panel panel--full">
@@ -52,7 +86,7 @@
           <div class="panel__head">
             <div>
               <h2>Ask NASAHub</h2>
-              <p>Use the agent workspace for grounded questions, matched entities, and guided follow-up prompts.</p>
+              <p>Use the agent workspace for grounded questions, matched entities, comparisons, and guided follow-up prompts.</p>
             </div>
           </div>
           <div class="tab-row tab-row--sub">
@@ -63,6 +97,13 @@
             <button class="button tab-button" data-workspace-view="osdr" type="button">OSDR Explorer</button>
           </div>
           <div class="detail-panel detail-panel--nested" data-workspace-panel="ask">
+            <div id="ask-onboarding" class="state-panel state-panel--calm">
+              <div class="state-panel__eyebrow">How To Ask Well</div>
+              <div class="state-panel__title">Start from a question a teammate would ask</div>
+              <div class="state-panel__body">
+                NASAHub is strongest when you ask for explanation, comparison, ranking, or operational context over curated data.
+              </div>
+            </div>
             <div class="detail-panel__head">
               <div class="inline-fields">
                 <select id="ask-mode">
@@ -85,11 +126,46 @@
               <textarea id="ask-question" rows="4" placeholder="Ask a grounded question about the selected object, event, or planet."></textarea>
               <div class="inline-fields">
                 <button id="ask-nasahub" class="button button--primary" type="button">Ask NASAHub</button>
+                <button id="save-ask-context" class="button" type="button">Save current context</button>
+                <button id="share-ask-context" class="button" type="button">Copy share link</button>
+                <button id="export-ask-response" class="button" type="button">Export answer JSON</button>
                 <button id="clear-ask-history" class="button" type="button">Clear conversation</button>
               </div>
             </div>
             <div id="ask-context-banner" class="summary-panel summary-panel--secondary">
-              No active comparison context yet. Load a record and use the compare helpers to build one.
+              Build context by loading a source record, or switch to general mode for a broader question across NASAHub.
+            </div>
+            <div class="session-shelf">
+              <article class="session-card">
+                <div class="session-card__head">
+                  <div>
+                    <h3>Pinned Items</h3>
+                    <p>Keep important entities close and reopen them quickly.</p>
+                  </div>
+                  <button class="button button--ghost" type="button" data-session-clear="pins">Clear</button>
+                </div>
+                <div id="pinned-items" class="session-list"></div>
+              </article>
+              <article class="session-card">
+                <div class="session-card__head">
+                  <div>
+                    <h3>Recent Comparisons</h3>
+                    <p>Return to the comparisons you were just working through.</p>
+                  </div>
+                  <button class="button button--ghost" type="button" data-session-clear="recentComparisons">Clear</button>
+                </div>
+                <div id="recent-comparisons" class="session-list"></div>
+              </article>
+              <article class="session-card">
+                <div class="session-card__head">
+                  <div>
+                    <h3>Saved Contexts</h3>
+                    <p>Store promising analysis setups before you branch out.</p>
+                  </div>
+                  <button class="button button--ghost" type="button" data-session-clear="savedContexts">Clear</button>
+                </div>
+                <div id="saved-contexts" class="session-list"></div>
+              </article>
             </div>
             <div class="detail-panel detail-panel--nested">
               <div class="detail-panel__head">
@@ -99,10 +175,10 @@
               <div id="ask-suggestion-chips" class="suggestion-chips"></div>
             </div>
             <div id="ask-nasahub-history" class="chat-thread">
-              Conversation history will appear here once you ask a question.
+              Ask NASAHub once and the conversation thread will start here.
             </div>
             <div id="ask-nasahub-response" class="summary-panel summary-panel--secondary">
-              Choose a source and entity, then ask a grounded question.
+              Pick a source and entity, or switch to general mode and ask a platform-wide question.
             </div>
           </div>
         </section>
@@ -138,6 +214,7 @@
             <span id="status-neows" class="section-badge section-badge--loading">Loading</span>
           </div>
           <div id="neows-spotlight" class="source-strip"></div>
+          <div id="neows-freshness" class="summary-panel summary-panel--secondary">Loading NeoWs freshness...</div>
           <div id="neows-summary" class="stack"></div>
           <div class="detail-panel">
             <div class="detail-panel__head">
@@ -163,11 +240,19 @@
               <div class="inline-fields">
                 <button id="neows-use-in-ask" class="button" type="button">Use in Ask NASAHub</button>
                 <button id="neows-use-as-comparison" class="button" type="button">Use as comparison</button>
+                <button id="neows-pin-current" class="button" type="button">Pin object</button>
+              </div>
+              <div id="neows-detail-guide" class="state-panel state-panel--calm">
+                <div class="state-panel__eyebrow">NeoWs Workspace</div>
+                <div class="state-panel__title">Load one object and work outward</div>
+                <div class="state-panel__body">
+                  Search for a NeoWs object, inspect its local summary, then layer on live NASA enrichment, close approaches, and Ask NASAHub comparisons.
+                </div>
               </div>
               <div id="neows-object-meta" class="explorer-meta"></div>
               <div id="neows-related-questions" class="suggestion-chips suggestion-chips--context"></div>
               <div id="neows-object-summary" class="summary-panel">
-                Choose a NeoWs object to see a short generated summary.
+                Search for a NeoWs object to see a concise local summary and a clearer “what should I notice?” reading of the record.
               </div>
               <div id="neows-live-enrichment" class="summary-panel summary-panel--secondary">
                 Live NASA enrichment has not been loaded yet.
@@ -210,6 +295,7 @@
             <span id="status-eonet" class="section-badge section-badge--loading">Loading</span>
           </div>
           <div id="eonet-spotlight" class="source-strip"></div>
+          <div id="eonet-freshness" class="summary-panel summary-panel--secondary">Loading EONET freshness...</div>
           <div id="eonet-summary" class="stack"></div>
           <div class="detail-panel">
             <div class="detail-panel__head">
@@ -229,11 +315,19 @@
               <div class="inline-fields">
                 <button id="eonet-use-in-ask" class="button" type="button">Use in Ask NASAHub</button>
                 <button id="eonet-use-as-comparison" class="button" type="button">Use as comparison</button>
+                <button id="eonet-pin-current" class="button" type="button">Pin event</button>
               </div>
-              <div id="eonet-detail-meta" class="explorer-meta">Choose an EONET event to view detail.</div>
+              <div id="eonet-detail-guide" class="state-panel state-panel--calm">
+                <div class="state-panel__eyebrow">EONET Workspace</div>
+                <div class="state-panel__title">Follow one event through operational context</div>
+                <div class="state-panel__body">
+                  Load an EONET event to see its status, categories, sources, and suggested follow-up questions for operations or explanation.
+                </div>
+              </div>
+              <div id="eonet-detail-meta" class="explorer-meta">Load an EONET event to open its focused detail workspace.</div>
               <div id="eonet-related-questions" class="suggestion-chips suggestion-chips--context"></div>
               <div id="eonet-insight" class="summary-panel summary-panel--secondary">
-                Choose an EONET event to activate contextual guidance.
+                Load an EONET event to activate contextual guidance and operational interpretation.
               </div>
               <div id="eonet-detail" class="detail-grid"></div>
             </div>
@@ -249,6 +343,7 @@
             <span id="status-exoplanet" class="section-badge section-badge--loading">Loading</span>
           </div>
           <div id="exoplanet-spotlight" class="source-strip"></div>
+          <div id="exoplanet-freshness" class="summary-panel summary-panel--secondary">Loading Exoplanet freshness...</div>
           <div id="exoplanet-summary" class="stack"></div>
           <div class="detail-panel">
             <div class="detail-panel__head">
@@ -275,11 +370,19 @@
               <div class="inline-fields">
                 <button id="exoplanet-use-in-ask" class="button" type="button">Use in Ask NASAHub</button>
                 <button id="exoplanet-use-as-comparison" class="button" type="button">Use as comparison</button>
+                <button id="exoplanet-pin-current" class="button" type="button">Pin planet</button>
               </div>
-              <div id="exoplanet-detail-meta" class="explorer-meta">Choose an exoplanet to view detail.</div>
+              <div id="exoplanet-detail-guide" class="state-panel state-panel--calm">
+                <div class="state-panel__eyebrow">Exoplanet Workspace</div>
+                <div class="state-panel__title">Move from discovery facts to scientific context</div>
+                <div class="state-panel__body">
+                  Search for a planet, inspect the discovery profile, then ask why it is notable or compare it with another catalog record.
+                </div>
+              </div>
+              <div id="exoplanet-detail-meta" class="explorer-meta">Load an exoplanet to open its focused discovery workspace.</div>
               <div id="exoplanet-related-questions" class="suggestion-chips suggestion-chips--context"></div>
               <div id="exoplanet-insight" class="summary-panel summary-panel--secondary">
-                Choose an exoplanet to activate contextual guidance.
+                Load an exoplanet to activate contextual guidance and scientific interpretation.
               </div>
               <div id="exoplanet-detail" class="detail-grid"></div>
             </div>
@@ -295,6 +398,7 @@
             <span id="status-osdr" class="section-badge section-badge--loading">Loading</span>
           </div>
           <div id="osdr-spotlight" class="source-strip"></div>
+          <div id="osdr-freshness" class="summary-panel summary-panel--secondary">Loading OSDR freshness...</div>
           <div id="osdr-summary" class="stack"></div>
         </section>
 
@@ -310,6 +414,8 @@
                 <div class="inline-fields">
                   <input id="workspace-neows-query" type="text" placeholder="object name or neo_reference_id" />
                   <button id="workspace-neows-search" class="button" type="button">Find</button>
+                  <button id="workspace-neows-share" class="button" type="button">Copy link</button>
+                  <button id="workspace-neows-export" class="button" type="button">Export JSON</button>
                 </div>
                 <div class="inline-fields">
                   <select id="workspace-neows-results">
@@ -337,6 +443,8 @@
                     <option value="closed">closed</option>
                   </select>
                   <button data-action="load-eonet" class="button">Load</button>
+                  <button id="eonet-share" class="button" type="button">Copy link</button>
+                  <button id="eonet-export" class="button" type="button">Export CSV</button>
                   <button id="eonet-reset" class="button" type="button">Reset</button>
                 </div>
                 <div id="eonet-active-filters" class="filter-pills"></div>
@@ -358,6 +466,8 @@
                   </select>
                   <input id="exoplanet-year" type="number" placeholder="disc_year" />
                   <button data-action="load-exoplanet" class="button">Load</button>
+                  <button id="exoplanet-share" class="button" type="button">Copy link</button>
+                  <button id="exoplanet-export" class="button" type="button">Export CSV</button>
                   <button id="exoplanet-reset" class="button" type="button">Reset</button>
                 </div>
                 <div id="exoplanet-active-filters" class="filter-pills"></div>
@@ -379,6 +489,8 @@
                     <option value="">Any data source</option>
                   </select>
                   <button data-action="load-osdr" class="button">Load</button>
+                  <button id="osdr-share" class="button" type="button">Copy link</button>
+                  <button id="osdr-export" class="button" type="button">Export CSV</button>
                   <button id="osdr-reset" class="button" type="button">Reset</button>
                 </div>
                 <div id="osdr-active-filters" class="filter-pills"></div>

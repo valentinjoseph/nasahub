@@ -30,8 +30,28 @@ services:
       - .env
     environment:
       POSTGRES_HOST: postgres
+      MONITOR_STATUS_FILE: /app/backups/postgres/latest_monitor_status.json
     ports:
-      - "192.168.1.28:8000:8000"
+      - "127.0.0.1:${API_BIND_PORT:-8000}:8000"
+    volumes:
+      - ../backups:/app/backups:ro
+
+  caddy:
+    image: caddy:2
+    container_name: nasahub-caddy
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    env_file:
+      - .env
+    ports:
+      - "${NASAHUB_BIND_IP:-192.168.1.28}:80:80"
+      - "${NASAHUB_BIND_IP:-192.168.1.28}:443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - nasahub_caddy_data:/data
+      - nasahub_caddy_config:/config
 
   ingestor:
     build:
@@ -50,3 +70,5 @@ services:
 
 volumes:
   nasahub_postgres_data:
+  nasahub_caddy_data:
+  nasahub_caddy_config:

@@ -145,6 +145,169 @@ nasahub/
     └── test_analytics_routes.py
 ```
 
+## Backup And Restore
+
+NASAHub now includes first-pass PostgreSQL backup and restore automation for the Lenovo-hosted stack.
+
+### Backup Script
+
+Use:
+
+```bash
+/home/hl-lenovo/projects/nasahub/scripts/run_postgres_backup.sh
+```
+
+What it does:
+
+* loads runtime settings from [`infra/.env`](/home/hl-lenovo/projects/nasahub/infra/.env)
+* creates a timestamped PostgreSQL custom-format dump from `nasahub-postgres`
+* stores it under `BACKUP_ROOT`
+* writes a small `metadata.json` beside the dump
+* removes backup directories older than `BACKUP_RETENTION_DAYS`
+
+Environment variables:
+
+* `BACKUP_ROOT`
+* `BACKUP_RETENTION_DAYS`
+
+If not set, the defaults are:
+
+* `BACKUP_ROOT=/home/hl-lenovo/projects/nasahub/backups/postgres`
+* `BACKUP_RETENTION_DAYS=14`
+
+### Restore Script
+
+Use:
+
+```bash
+/home/hl-lenovo/projects/nasahub/scripts/restore_postgres_backup.sh /absolute/path/to/backup.dump
+```
+
+What it does:
+
+* prompts for explicit confirmation
+* restores the selected PostgreSQL custom-format dump into the running `nasahub-postgres` container
+* uses `pg_restore --clean --if-exists`
+
+Important:
+
+* this is a destructive restore operation
+* use it only when you intentionally want to replace current database objects with the selected backup state
+
+### Cron Example
+
+Example daily backup at `02:30` on the Lenovo:
+
+```cron
+30 2 * * * /home/hl-lenovo/projects/nasahub/scripts/run_postgres_backup.sh >> /home/hl-lenovo/projects/nasahub/backups/postgres/backup.log 2>&1
+```
+
+### Operational Recommendation
+
+At minimum:
+
+* keep automated daily backups
+* periodically copy backup directories off the Lenovo
+* test one real restore in a safe window before relying on the process operationally
+
+## Monitoring And Alerting
+
+NASAHub now includes a first-pass operational monitoring script for the Lenovo deployment.
+
+### Monitoring Script
+
+Use:
+
+```bash
+/home/hl-lenovo/projects/nasahub/scripts/check_nasahub_health.sh
+```
+
+What it checks:
+
+* Docker container status for:
+  * `nasahub-postgres`
+  * `nasahub-api`
+  * `nasahub-caddy`
+* local readiness:
+  * `http://127.0.0.1:8000/health/ready`
+* public readiness:
+  * `https://nasahub.cloud/health/ready`
+* PostgreSQL backup freshness under `BACKUP_ROOT`
+* latest ingestion run freshness and status from `tech.run_management`
+* TLS certificate lifetime for `NASAHUB_PUBLIC_HOST`
+* latest monitor snapshot written to `MONITOR_STATUS_FILE` for dashboard/API consumption
+
+The monitor reports those checks in five categories:
+
+* platform health
+* public availability
+* backup safety
+* ingestion freshness
+* certificate status
+
+Optional alerting:
+
+* set `MONITOR_ALERT_WEBHOOK_URL` in [`infra/.env`](/home/hl-lenovo/projects/nasahub/infra/.env)
+* when configured, failed checks send a small JSON payload to that webhook
+
+### Monitoring Environment Variables
+
+The monitoring script supports:
+
+* `MONITOR_PUBLIC_BASE_URL`
+* `MONITOR_LOCAL_READY_URL`
+* `MONITOR_PUBLIC_READY_URL`
+* `MONITOR_TIMEOUT_SECONDS`
+* `MONITOR_BACKUP_MAX_AGE_HOURS`
+* `MONITOR_CERT_MIN_DAYS`
+* `MONITOR_RUN_MAX_AGE_HOURS`
+* source-aware overrides such as:
+  * `MONITOR_RUN_MAX_AGE_HOURS_NEOWS_NEO_FEED`
+  * `MONITOR_RUN_MAX_AGE_HOURS_NEOWS_NEO_BROWSE`
+  * `MONITOR_RUN_MAX_AGE_HOURS_EXOPLANET_PSCOMPPARS`
+  * `MONITOR_RUN_MAX_AGE_HOURS_OSDR_DATASETS`
+* `MONITOR_ALERT_WEBHOOK_URL`
+
+Run freshness is intentionally source-aware. The default monitor treats:
+
+* EONET and `neows/neo_feed` as operational feeds with tighter thresholds
+* `neo_browse`, `neo_lookup`, `exoplanet/ps`, and some OSDR loads as slower reference refreshes with looser thresholds
+* `MONITOR_RUN_MAX_AGE_HOURS` as the global fallback for any endpoint without an explicit override
+
+### Cron Example
+
+Example health check every 15 minutes on the Lenovo:
+
+```cron
+*/15 * * * * /home/hl-lenovo/projects/nasahub/scripts/check_nasahub_health.sh >> /home/hl-lenovo/projects/nasahub/backups/postgres/monitor.log 2>&1
+```
+
+Recommended schedule combination:
+
+* daily backup via `run_postgres_backup.sh`
+* 15-minute health checks via `check_nasahub_health.sh`
+
+### Managed Cron Install
+
+NASAHub also includes a managed cron template and installer:
+
+* [`nasahub.crontab`](/home/hl-lenovo/projects/nasahub/infra/nasahub.crontab)
+* [`install_nasahub_cron.sh`](/home/hl-lenovo/projects/nasahub/scripts/install_nasahub_cron.sh)
+
+Use:
+
+```bash
+/home/hl-lenovo/projects/nasahub/scripts/install_nasahub_cron.sh
+```
+
+What it does:
+
+* preserves your existing user crontab entries
+* replaces only the NASAHub-managed cron block
+* installs:
+  * daily PostgreSQL backup at `02:30`
+  * 15-minute NASAHub monitoring checks
+
 ## Database Design
 
 ### Schemas In Use

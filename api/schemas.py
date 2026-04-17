@@ -30,6 +30,19 @@ class IngestionStatusResponse(BaseModel):
     created_at: datetime
 
 
+class MonitorCategoryStatusResponse(BaseModel):
+    issue_count: int
+    issues: list[str]
+
+
+class MonitorStatusResponse(BaseModel):
+    checked_at_utc: datetime | None
+    overall_status: str
+    issue_count: int
+    source: str
+    categories: dict[str, MonitorCategoryStatusResponse]
+
+
 class NeoWsDailySummaryResponse(BaseModel):
     close_approach_date: date
     neo_count: int
@@ -287,6 +300,46 @@ class OsdrDatasetCatalogPageResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class SavedAskContextRequest(BaseModel):
+    label: str
+    mode: str = Field(default="entity", pattern="^(entity|general)$")
+    source: str = Field(default="general", pattern="^(general|neows|eonet|exoplanet|osdr)$")
+    entity_id: str | None = None
+    comparison_entity_id: str | None = None
+    question: str = ""
+    include_live_enrichment: bool = False
+
+
+class SavedAskContextResponse(BaseModel):
+    context_id: str
+    label: str
+    mode: str
+    source: str
+    entity_id: str | None
+    comparison_entity_id: str | None
+    question: str
+    include_live_enrichment: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class PinnedEntityRequest(BaseModel):
+    source: str = Field(pattern="^(neows|eonet|exoplanet|osdr)$")
+    entity_id: str
+    label: str
+    watchlist: bool = False
+
+
+class PinnedEntityResponse(BaseModel):
+    pin_id: str
+    source: str
+    entity_id: str
+    label: str
+    watchlist: bool
+    created_at: datetime
+    updated_at: datetime
 
 
 class AskNasaHubRequest(BaseModel):

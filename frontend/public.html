@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NASAHub</title>
+    <link rel="stylesheet" href="/dashboard-assets/dashboard.css" />
+  </head>
+  <body class="landing-body">
+    <div class="landing-shell">
+      <header class="landing-hero">
+        <div class="landing-hero__content">
+          <p class="eyebrow">Self-hosted NASA data platform</p>
+          <h1>NASAHub</h1>
+          <p class="landing-copy">
+            Curated NASA analytics, retrieval-first exploration, and a shareable AI workspace
+            running from a private Lenovo server and published at <strong>nasahub.cloud</strong>.
+          </p>
+          <div class="landing-actions">
+            <a class="button button--primary" href="/viewer">Open Viewer</a>
+            <a class="button" href="/dashboard">Admin Dashboard</a>
+          </div>
+          <p class="landing-note">
+            Viewer mode is read-only and keeps personal saved work in the browser. Admin mode
+            uses the protected dashboard token and stores shared operational state on the Lenovo.
+          </p>
+        </div>
+      </header>
+
+      <main class="landing-grid">
+        <section class="panel panel--full">
+          <div class="panel__head">
+            <div>
+              <h2>What NASAHub Is For</h2>
+              <p>NASAHub is designed as both an overview surface and a guided exploration workspace.</p>
+            </div>
+          </div>
+          <div class="source-strip source-strip--welcome">
+            <article class="source-chip">
+              <div class="source-chip__label">Operations</div>
+              <div class="source-chip__value">Check ingestion health</div>
+              <div class="source-chip__sub">Track readiness, freshness, and staging-to-curated flow across the platform.</div>
+            </article>
+            <article class="source-chip">
+              <div class="source-chip__label">Science</div>
+              <div class="source-chip__value">Explore curated NASA data</div>
+              <div class="source-chip__sub">Work through NeoWs, EONET, Exoplanet, and OSDR with charts, filters, and detail views.</div>
+            </article>
+            <article class="source-chip">
+              <div class="source-chip__label">Ask NASAHub</div>
+              <div class="source-chip__value">Use a grounded agent</div>
+              <div class="source-chip__sub">Ask entity or general questions over curated data with citations and controlled live enrichment.</div>
+            </article>
+            <article class="source-chip">
+              <div class="source-chip__label">Compare</div>
+              <div class="source-chip__value">Work side by side</div>
+              <div class="source-chip__sub">Pin objects, compare records, and revisit saved analysis context as the product evolves.</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel panel--full">
+          <div class="panel__head">
+            <div>
+              <h2>Best First Path</h2>
+              <p>If this is your first time in NASAHub, this route usually feels the clearest.</p>
+            </div>
+          </div>
+          <div class="onboarding-grid">
+            <article class="state-panel state-panel--calm">
+              <div class="state-panel__eyebrow">1. Start In Viewer</div>
+              <div class="state-panel__title">Open the shared product safely</div>
+              <div class="state-panel__body">
+                Use viewer mode to browse the analytics product without changing shared Lenovo-backed state.
+              </div>
+            </article>
+            <article class="state-panel state-panel--calm">
+              <div class="state-panel__eyebrow">2. Pick One Source</div>
+              <div class="state-panel__title">Stay focused on one story</div>
+              <div class="state-panel__body">
+                NeoWs works well for object questions, EONET for event operations, Exoplanet for discovery context, and OSDR for datasets.
+              </div>
+            </article>
+            <article class="state-panel state-panel--calm">
+              <div class="state-panel__eyebrow">3. Ask A Grounded Question</div>
+              <div class="state-panel__title">Let the assistant work from curated data</div>
+              <div class="state-panel__body">
+                Ask a broad question like “Which is the biggest object that got close to Earth?” or load one record and ask for explanation or comparison.
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel panel--full">
+          <div class="panel__head">
+            <div>
+              <h2>Good Questions To Start With</h2>
+              <p>NASAHub works best when the question sounds like analysis, not like raw database querying.</p>
+            </div>
+          </div>
+          <div class="suggestion-chips suggestion-chips--landing">
+            <span class="suggestion-chip suggestion-chip--static">Which is the biggest object that got close to Earth?</span>
+            <span class="suggestion-chip suggestion-chip--static">What are the latest open EONET events right now?</span>
+            <span class="suggestion-chip suggestion-chip--static">Which exoplanets in the catalog are nearest?</span>
+            <span class="suggestion-chip suggestion-chip--static">Summarize this object and compare it with the live NASA view.</span>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head">
+            <div>
+              <h2>Viewer Access</h2>
+              <p>Best for shared demonstrations and read-only exploration.</p>
+            </div>
+          </div>
+          <div class="summary-panel summary-panel--secondary">
+            <strong>Use:</strong> <a href="/viewer">/viewer</a><br />
+            Opens the dashboard with the shared viewer cookie flow and keeps personal shelf state in the browser.
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head">
+            <div>
+              <h2>Admin Access</h2>
+              <p>Best for operating the platform and managing shared saved state.</p>
+            </div>
+          </div>
+          <div class="summary-panel summary-panel--secondary">
+            <strong>Use:</strong> <a href="/dashboard">/dashboard</a><br />
+            Add the protected admin token in the dashboard to unlock Lenovo-backed contexts, pins, and full control.
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

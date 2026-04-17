@@ -4,23 +4,37 @@ import unittest
 from unittest.mock import patch
 
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from api.main import (
     DASHBOARD_INDEX,
     FRONTEND_DIR,
+    PUBLIC_INDEX,
+    RATE_LIMIT_BUCKETS,
     app,
     build_access_log_payload,
+    consume_rate_limit,
     get_request_id,
+    get_rate_limit_scope,
     health,
     health_live,
     health_ready,
     path_requires_auth,
     request_has_valid_auth,
+    request_has_valid_viewer_auth,
+    root,
+    viewer,
+    viewer_logout,
+    viewer_request_is_allowed,
 )
-from api.schemas import AskNasaHubRequest
+from api.schemas import AskNasaHubRequest, PinnedEntityRequest, SavedAskContextRequest
 from api.routes.analytics import (
     ANALYTICS_ENDPOINTS,
     ask_nasahub,
+    create_pin,
+    create_saved_context,
+    delete_pin,
+    delete_saved_context,
     get_analytics_catalog,
     get_eonet_event_detail,
     get_eonet_event_insight,
@@ -45,6 +59,8 @@ from api.routes.analytics import (
     list_osdr_assay_type_summary,
     list_osdr_dataset_summary,
     list_osdr_datasets,
+    list_pins,
+    list_saved_contexts,
 )
 
 
@@ -72,22 +88,35 @@ class FakeSession:
         self.scalar_values = list(scalar_values or [])
         self.queries = []
         self.params = []
+        self.commits = 0
 
     def execute(self, statement, params=None):
         self.queries.append(str(statement))
         self.params.append(params)
         normalized = str(statement).strip().upper()
-        if normalized.startswith("SELECT COUNT(*)"):
+        if normalized.startswith("SELECT COUNT(*)") or "SELECT COUNT(*) FROM DELETED" in normalized:
             return FakeResult(scalar_value=self.scalar_values.pop(0))
         return FakeResult(rows=self.rows)
 
+    def commit(self):
+        self.commits += 1
+
 
 class AnalyticsRoutesTestCase(unittest.TestCase):
+    def setUp(self):
+        for bucket in ("public", "ask"):
+            RATE_LIMIT_BUCKETS[bucket].clear()
+
     def test_infer_general_source_prefers_neows_for_asteroid_question(self):
         self.assertEqual(
             infer_general_source("Which is the biggest asteroid that got close to Earth?"),
             "neows",
         )
+
+    def test_root_serves_public_landing_page(self):
+        response = root()
+
+        self.assertEqual(str(response.path), str(PUBLIC_INDEX))
 
     def test_infer_general_intent_detects_source_specific_ranking(self):
         self.assertEqual(
@@ -115,6 +144,7 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
             {
                 "/analytics/catalog",
                 "/analytics/ingestion-status",
+                "/analytics/monitor-status",
                 "/analytics/neows/daily-summary",
                 "/analytics/neows/kpis",
                 "/analytics/neows/object/{neo_reference_id}",
@@ -136,9 +166,14 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
                 "/analytics/osdr/assay-type-summary",
                 "/analytics/osdr/datasets",
                 "/analytics/ask",
+                "/analytics/saved-contexts",
+                "/analytics/saved-contexts/{context_id}",
+                "/analytics/pins",
+                "/analytics/pins/{pin_id}",
             },
         )
         ingestion_status = openapi["paths"]["/analytics/ingestion-status"]["get"]
+        monitor_status = openapi["paths"]["/analytics/monitor-status"]["get"]
         analytics_catalog = openapi["paths"]["/analytics/catalog"]["get"]
         daily_summary = openapi["paths"]["/analytics/neows/daily-summary"]["get"]
         kpis = openapi["paths"]["/analytics/neows/kpis"]["get"]
@@ -161,6 +196,10 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
         osdr_assay_type_summary = openapi["paths"]["/analytics/osdr/assay-type-summary"]["get"]
         osdr_datasets = openapi["paths"]["/analytics/osdr/datasets"]["get"]
         ask_nasahub_route = openapi["paths"]["/analytics/ask"]["post"]
+        saved_contexts = openapi["paths"]["/analytics/saved-contexts"]["get"]
+        saved_contexts_post = openapi["paths"]["/analytics/saved-contexts"]["post"]
+        pins = openapi["paths"]["/analytics/pins"]["get"]
+        pins_post = openapi["paths"]["/analytics/pins"]["post"]
 
         self.assertEqual(
             analytics_catalog["responses"]["200"]["content"]["application/json"]["schema"][
@@ -173,6 +212,12 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
                 "items"
             ]["$ref"],
             "#/components/schemas/IngestionStatusResponse",
+        )
+        self.assertEqual(
+            monitor_status["responses"]["200"]["content"]["application/json"]["schema"][
+                "$ref"
+            ],
+            "#/components/schemas/MonitorStatusResponse",
         )
         self.assertEqual(
             daily_summary["responses"]["200"]["content"]["application/json"]["schema"][
@@ -300,6 +345,24 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
             ],
             "#/components/schemas/AskNasaHubResponse",
         )
+        self.assertEqual(
+            saved_contexts["responses"]["200"]["content"]["application/json"]["schema"][
+                "items"
+            ]["$ref"],
+            "#/components/schemas/SavedAskContextResponse",
+        )
+        self.assertEqual(
+            saved_contexts_post["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/SavedAskContextRequest",
+        )
+        self.assertEqual(
+            pins["responses"]["200"]["content"]["application/json"]["schema"]["items"]["$ref"],
+            "#/components/schemas/PinnedEntityResponse",
+        )
+        self.assertEqual(
+            pins_post["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/PinnedEntityRequest",
+        )
         parameters = {
             parameter["name"]: parameter["schema"]
             for parameter in eonet_event_overview["parameters"]
@@ -387,12 +450,40 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
     def test_health_paths_are_exempt_from_auth(self):
         self.assertFalse(path_requires_auth("/"))
         self.assertFalse(path_requires_auth("/dashboard"))
+        self.assertFalse(path_requires_auth("/viewer"))
+        self.assertFalse(path_requires_auth("/viewer/logout"))
         self.assertFalse(path_requires_auth("/dashboard-assets/dashboard.js"))
         self.assertFalse(path_requires_auth("/health"))
         self.assertFalse(path_requires_auth("/health/live"))
         self.assertFalse(path_requires_auth("/health/ready"))
         self.assertTrue(path_requires_auth("/analytics/catalog"))
         self.assertTrue(path_requires_auth("/docs"))
+
+    def test_viewer_route_sets_cookie_and_redirects_to_dashboard(self):
+        request = Request(
+            {
+                "type": "http",
+                "headers": [(b"x-forwarded-proto", b"https")],
+                "query_string": b"",
+            }
+        )
+        with patch("api.main.VIEWER_ACCESS_TOKEN", "viewer-token"):
+            response = viewer(request)
+
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(response.headers["location"], "/dashboard")
+        self.assertIn("nasahub_viewer_token=viewer-token", response.headers["set-cookie"])
+        self.assertIn("Secure", response.headers["set-cookie"])
+        self.assertEqual(response.headers["cache-control"], "no-store")
+
+    def test_viewer_logout_clears_cookie_and_redirects_to_dashboard(self):
+        response = viewer_logout()
+
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(response.headers["location"], "/dashboard")
+        self.assertIn("nasahub_viewer_token=", response.headers["set-cookie"])
+        self.assertIn("Max-Age=0", response.headers["set-cookie"])
+        self.assertEqual(response.headers["cache-control"], "no-store")
 
     def test_request_has_valid_auth_supports_api_key_and_bearer(self):
         expected_token = "secret-token"
@@ -413,6 +504,63 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
             request_has_valid_auth({"authorization": "Bearer wrong-token"}, expected_token)
         )
         self.assertFalse(request_has_valid_auth({}, expected_token))
+
+    def test_viewer_auth_supports_header_query_and_cookie(self):
+        expected_token = "viewer-token"
+
+        header_request = Request(
+            {
+                "type": "http",
+                "headers": [(b"x-viewer-token", b"viewer-token")],
+                "query_string": b"",
+            }
+        )
+        query_request = Request(
+            {
+                "type": "http",
+                "headers": [],
+                "query_string": b"access=viewer-token",
+            }
+        )
+        cookie_request = Request(
+            {
+                "type": "http",
+                "headers": [(b"cookie", b"nasahub_viewer_token=viewer-token")],
+                "query_string": b"",
+            }
+        )
+
+        self.assertTrue(request_has_valid_viewer_auth(header_request, expected_token))
+        self.assertTrue(request_has_valid_viewer_auth(query_request, expected_token))
+        self.assertTrue(request_has_valid_viewer_auth(cookie_request, expected_token))
+
+    def test_viewer_request_policy_is_read_mostly(self):
+        self.assertTrue(viewer_request_is_allowed("GET", "/analytics/catalog"))
+        self.assertTrue(viewer_request_is_allowed("POST", "/analytics/ask"))
+        self.assertFalse(viewer_request_is_allowed("POST", "/analytics/pins"))
+        self.assertFalse(viewer_request_is_allowed("DELETE", "/analytics/pins/pin-1"))
+        self.assertFalse(viewer_request_is_allowed("GET", "/analytics/saved-contexts"))
+
+    def test_rate_limit_scope_prioritizes_public_and_ask_paths(self):
+        self.assertEqual(get_rate_limit_scope("GET", "/"), "public")
+        self.assertEqual(get_rate_limit_scope("GET", "/dashboard"), "public")
+        self.assertEqual(get_rate_limit_scope("GET", "/analytics/catalog"), "public")
+        self.assertEqual(get_rate_limit_scope("POST", "/analytics/ask"), "ask")
+        self.assertIsNone(get_rate_limit_scope("POST", "/analytics/pins"))
+
+    def test_consume_rate_limit_blocks_after_limit_is_reached(self):
+        allowed, retry_after = consume_rate_limit("ask", "203.0.113.10", now=1000.0)
+        self.assertTrue(allowed)
+        self.assertEqual(retry_after, 0)
+
+        with patch("api.main.ASK_RATE_LIMIT_MAX_REQUESTS", 2), patch(
+            "api.main.PUBLIC_RATE_LIMIT_WINDOW_SECONDS", 60
+        ):
+            self.assertTrue(consume_rate_limit("ask", "203.0.113.10", now=1001.0)[0])
+            allowed, retry_after = consume_rate_limit("ask", "203.0.113.10", now=1002.0)
+
+        self.assertFalse(allowed)
+        self.assertGreaterEqual(retry_after, 1)
 
     def test_get_request_id_reuses_header_or_generates_one(self):
         self.assertEqual(
@@ -454,9 +602,83 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
 
         self.assertEqual(response, {"endpoints": ANALYTICS_ENDPOINTS})
         self.assertEqual(response["endpoints"][0].path, "/analytics/ingestion-status")
+        self.assertTrue(any(endpoint.path == "/analytics/saved-contexts" for endpoint in response["endpoints"]))
+        self.assertTrue(any(endpoint.path == "/analytics/pins" for endpoint in response["endpoints"]))
         paginated_endpoints = [endpoint for endpoint in response["endpoints"] if endpoint.paginated]
         self.assertTrue(paginated_endpoints)
         self.assertIn("limit", paginated_endpoints[0].filters)
+
+    def test_saved_context_routes_round_trip_expected_queries(self):
+        rows = [
+            {
+                "context_id": "ctx-1",
+                "label": "Compare two objects",
+                "mode": "entity",
+                "source": "neows",
+                "entity_id": "3542519",
+                "comparison_entity_id": "2285339",
+                "question": "Compare them",
+                "include_live_enrichment": False,
+                "created_at": datetime(2026, 4, 16, 12, 0, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 4, 16, 12, 0, tzinfo=timezone.utc),
+            }
+        ]
+        db = FakeSession(rows=rows, scalar_values=[1])
+
+        listed = list_saved_contexts(db=db)
+        created = create_saved_context(
+            payload=SavedAskContextRequest(
+                label="Compare two objects",
+                mode="entity",
+                source="neows",
+                entity_id="3542519",
+                comparison_entity_id="2285339",
+                question="Compare them",
+                include_live_enrichment=False,
+            ),
+            db=db,
+        )
+        deleted = delete_saved_context("ctx-1", db=db)
+
+        self.assertEqual(listed[0]["context_id"], "ctx-1")
+        self.assertEqual(created["label"], "Compare two objects")
+        self.assertEqual(deleted, {"deleted": True, "context_id": "ctx-1"})
+        self.assertTrue(any("FROM tech.saved_ask_contexts" in query for query in db.queries))
+        self.assertTrue(any("INSERT INTO tech.saved_ask_contexts" in query for query in db.queries))
+        self.assertEqual(db.commits, 2)
+
+    def test_pin_routes_round_trip_expected_queries(self):
+        rows = [
+            {
+                "pin_id": "pin-1",
+                "source": "osdr",
+                "entity_id": "OSD-123",
+                "label": "OSD-123",
+                "watchlist": True,
+                "created_at": datetime(2026, 4, 16, 12, 0, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 4, 16, 12, 0, tzinfo=timezone.utc),
+            }
+        ]
+        db = FakeSession(rows=rows, scalar_values=[1])
+
+        listed = list_pins(db=db)
+        created = create_pin(
+            payload=PinnedEntityRequest(
+                source="osdr",
+                entity_id="OSD-123",
+                label="OSD-123",
+                watchlist=True,
+            ),
+            db=db,
+        )
+        deleted = delete_pin("pin-1", db=db)
+
+        self.assertEqual(listed[0]["pin_id"], "pin-1")
+        self.assertEqual(created["entity_id"], "OSD-123")
+        self.assertEqual(deleted, {"deleted": True, "pin_id": "pin-1"})
+        self.assertTrue(any("FROM tech.pinned_entities" in query for query in db.queries))
+        self.assertTrue(any("INSERT INTO tech.pinned_entities" in query for query in db.queries))
+        self.assertEqual(db.commits, 2)
 
     def test_page_response_models_expose_standard_pagination_fields(self):
         schemas = app.openapi()["components"]["schemas"]
