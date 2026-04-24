@@ -104,19 +104,39 @@ body::after {
   margin: 0 0 20px;
 }
 
-.landing-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
 .landing-note {
   margin: 0;
   color: var(--muted);
   max-width: 70ch;
   font-size: 0.94rem;
   line-height: 1.55;
+}
+
+.landing-sign-in {
+  display: grid;
+  gap: 14px;
+  max-width: 680px;
+  margin: 22px 0 16px;
+}
+
+.landing-sign-in__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.landing-sign-in label {
+  display: grid;
+  gap: 6px;
+}
+
+.landing-sign-in span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.landing-sign-in .button {
+  justify-self: start;
 }
 
 .landing-grid {
@@ -127,14 +147,13 @@ body::after {
 
 .hero {
   display: grid;
-  grid-template-columns: 1.4fr 0.9fr;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 24px;
   align-items: stretch;
   margin-bottom: 24px;
 }
 
 .hero__content,
-.hero__controls,
 .panel,
 .explorer-card {
   background: var(--panel);
@@ -149,16 +168,21 @@ body::after {
 }
 
 .hero__controls {
-  padding: 24px;
   display: flex;
-  flex-direction: column;
-  gap: 14px;
-  justify-content: center;
+  align-items: flex-start;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .hero__status-row {
   display: flex;
   justify-content: flex-end;
+}
+
+.account-controls {
+  align-self: start;
+  flex-wrap: wrap;
+  padding-top: 2px;
 }
 
 .mode-banner {
@@ -182,6 +206,31 @@ body::after {
 .mode-banner--admin {
   background: rgba(75, 182, 255, 0.14);
   color: #d8f5ff;
+}
+
+.login-box {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(118, 158, 214, 0.18);
+  border-radius: 14px;
+  background: rgba(4, 13, 24, 0.34);
+}
+
+.login-box label {
+  display: grid;
+  gap: 6px;
+}
+
+.login-box span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.login-box__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .eyebrow {
@@ -1120,6 +1169,10 @@ select {
 
   .detail-grid--featured,
   .detail-grid--compact {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-sign-in__fields {
     grid-template-columns: 1fr;
   }
 

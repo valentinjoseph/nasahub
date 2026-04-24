@@ -16,13 +16,23 @@
             Curated NASA analytics, retrieval-first exploration, and a shareable AI workspace
             running from a private Lenovo server and published at <strong>nasahub.cloud</strong>.
           </p>
-          <div class="landing-actions">
-            <a class="button button--primary" href="/viewer">Open Viewer</a>
-            <a class="button" href="/dashboard">Admin Dashboard</a>
-          </div>
+          <form id="landing-sign-in" class="landing-sign-in">
+            <div class="landing-sign-in__fields">
+              <label>
+                <span>Username</span>
+                <input id="landing-username" type="text" autocomplete="username" placeholder="admin, user, or guest" />
+              </label>
+              <label>
+                <span>Password</span>
+                <input id="landing-password" type="password" autocomplete="current-password" />
+              </label>
+            </div>
+            <button class="button button--primary" type="submit">Sign In</button>
+            <p id="landing-sign-in-status" class="landing-note">Use the guest, user, or admin account to enter NASAHub.</p>
+          </form>
           <p class="landing-note">
-            Viewer mode is read-only and keeps personal saved work in the browser. Admin mode
-            uses the protected dashboard token and stores shared operational state on the Lenovo.
+            Guest can explore analytics without chatbot access. User and admin can use the full console,
+            Ask NASAHub, and shared operational state on the Lenovo.
           </p>
         </div>
       </header>
@@ -68,10 +78,10 @@
           </div>
           <div class="onboarding-grid">
             <article class="state-panel state-panel--calm">
-              <div class="state-panel__eyebrow">1. Start In Viewer</div>
-              <div class="state-panel__title">Open the shared product safely</div>
+              <div class="state-panel__eyebrow">1. Sign In</div>
+              <div class="state-panel__title">Use guest, user, or admin credentials</div>
               <div class="state-panel__body">
-                Use viewer mode to browse the analytics product without changing shared Lenovo-backed state.
+                Guest opens the analytics product safely. User and admin open the chat-enabled console.
               </div>
             </article>
             <article class="state-panel state-panel--calm">
@@ -85,7 +95,7 @@
               <div class="state-panel__eyebrow">3. Ask A Grounded Question</div>
               <div class="state-panel__title">Let the assistant work from curated data</div>
               <div class="state-panel__body">
-                Ask a broad question like “Which is the biggest object that got close to Earth?” or load one record and ask for explanation or comparison.
+                Admin can ask broad questions like “Which is the biggest object that got close to Earth?” or load one record and ask for explanation or comparison.
               </div>
             </article>
           </div>
@@ -109,29 +119,40 @@
         <section class="panel">
           <div class="panel__head">
             <div>
-              <h2>Viewer Access</h2>
-              <p>Best for shared demonstrations and read-only exploration.</p>
+              <h2>Guest Account</h2>
+              <p>Best for read-only exploration.</p>
             </div>
           </div>
           <div class="summary-panel summary-panel--secondary">
-            <strong>Use:</strong> <a href="/viewer">/viewer</a><br />
-            Opens the dashboard with the shared viewer cookie flow and keeps personal shelf state in the browser.
+            Sign in with username <strong>guest</strong>. Guest can browse analytics but cannot use Ask NASAHub.
           </div>
         </section>
 
         <section class="panel">
           <div class="panel__head">
             <div>
-              <h2>Admin Access</h2>
+              <h2>Admin Account</h2>
               <p>Best for operating the platform and managing shared saved state.</p>
             </div>
           </div>
           <div class="summary-panel summary-panel--secondary">
-            <strong>Use:</strong> <a href="/dashboard">/dashboard</a><br />
-            Add the protected admin token in the dashboard to unlock Lenovo-backed contexts, pins, and full control.
+            Sign in with username <strong>admin</strong>. Admin has access to the chatbot, saved contexts, pins, and full control.
+          </div>
+        </section>
+
+        <section class="panel panel--full">
+          <div class="panel__head">
+            <div>
+              <h2>User Account</h2>
+              <p>Best for authenticated exploration with chatbot access.</p>
+            </div>
+          </div>
+          <div class="summary-panel summary-panel--secondary">
+            Configure username <strong>user</strong> or your preferred value in the environment. User can use Ask NASAHub.
           </div>
         </section>
       </main>
     </div>
+    <script src="/dashboard-assets/public.js?v=account-ui-20260424" defer></script>
   </body>
 </html>
