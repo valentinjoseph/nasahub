@@ -1,4 +1,9 @@
 const tokenInput = document.querySelector("#api-token");
+const loginForm = document.querySelector("#login-form");
+const loginUsername = document.querySelector("#login-username");
+const loginPassword = document.querySelector("#login-password");
+const loginStatus = document.querySelector("#login-status");
+const logoutButton = document.querySelector("#logout-button");
 const refreshButton = document.querySelector("#refresh-all");
 const lastRefresh = document.querySelector("#last-refresh");
 const apiModeIndicator = document.querySelector("#api-mode-indicator");
@@ -23,15 +28,32 @@ function hasCookie(name) {
     .some((item) => item === `${name}=1`);
 }
 
-const initialViewerMode = hasCookie("nasahub_viewer_mode");
+function getCookieValue(name) {
+  const prefix = `${name}=`;
+  const match = document.cookie
+    .split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(prefix));
+  return match ? decodeURIComponent(match.slice(prefix.length)) : "";
+}
 
-function storageKey(name, viewerMode = initialViewerMode) {
-  return viewerMode ? `nasahub_viewer_${name}` : `nasahub_${name}`;
+const initialViewerMode = hasCookie("nasahub_viewer_mode");
+const initialLoginRole = getCookieValue("nasahub_login_role");
+
+function storageKey(name, viewerMode = initialViewerMode, loginRole = initialLoginRole) {
+  if (viewerMode) {
+    return `nasahub_viewer_${name}`;
+  }
+  if (["guest", "user"].includes(loginRole)) {
+    return `nasahub_${loginRole}_${name}`;
+  }
+  return `nasahub_${name}`;
 }
 
 const state = {
   token: sessionStorage.getItem("nasahub_api_token") || "",
   viewerMode: initialViewerMode,
+  loginRole: ["admin", "user", "guest"].includes(initialLoginRole) ? initialLoginRole : "",
   askHistory: getStoredJson(storageKey("ask_history"), []),
   pins: getStoredJson(storageKey("pins"), []),
   recentComparisons: getStoredJson(storageKey("recent_comparisons"), []),
@@ -73,22 +95,41 @@ const state = {
   },
 };
 
-tokenInput.value = state.token;
+if (tokenInput) {
+  tokenInput.value = state.token;
+}
 updateApiModeIndicator();
 
-tokenInput.addEventListener("change", () => {
-  state.token = tokenInput.value.trim();
-  if (state.token) {
-    sessionStorage.setItem("nasahub_api_token", state.token);
-  } else {
-    sessionStorage.removeItem("nasahub_api_token");
-  }
-  updateApiModeIndicator();
-});
+if (tokenInput) {
+  tokenInput.addEventListener("change", () => {
+    state.token = tokenInput.value.trim();
+    if (state.token) {
+      sessionStorage.setItem("nasahub_api_token", state.token);
+    } else {
+      sessionStorage.removeItem("nasahub_api_token");
+    }
+    updateApiModeIndicator();
+  });
+}
 
-refreshButton.addEventListener("click", () => {
-  refreshCurrentView();
-});
+if (loginForm) {
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await loginWithAccount();
+  });
+}
+
+if (logoutButton) {
+  logoutButton.addEventListener("click", () => {
+    window.location.href = "/logout";
+  });
+}
+
+if (refreshButton) {
+  refreshButton.addEventListener("click", () => {
+    refreshCurrentView();
+  });
+}
 
 document.querySelector('[data-action="load-eonet"]').addEventListener("click", loadEonetExplorer);
 document.querySelector('[data-action="load-exoplanet"]').addEventListener("click", loadExoplanetExplorer);
@@ -266,6 +307,14 @@ function isViewerMode() {
   return Boolean(state.viewerMode && !state.token);
 }
 
+function isGuestLogin() {
+  return Boolean(state.loginRole === "guest" && !state.token);
+}
+
+function usesLocalShelf() {
+  return isViewerMode() || isGuestLogin();
+}
+
 async function fetchJson(path) {
   const response = await fetch(path, {
     headers: requestHeaders(),
@@ -287,11 +336,14 @@ function setLoading(targetId) {
 function renderError(targetId, message) {
   const normalized = String(message || "");
   const isUnauthorized = normalized.includes("401 Unauthorized");
+  const isForbidden = normalized.includes("403 Forbidden");
   const title = isUnauthorized ? "Authentication needed" : "Something needs attention";
   const guidance = isUnauthorized
     ? isViewerMode()
-      ? "Viewer mode is active, but this route still needs valid viewer access. Reopen NASAHub with the full shared link or use an admin token."
-      : "Add a valid admin token, or open NASAHub with a viewer link that includes the shared access token."
+      ? "Shared access is active, but this route still needs an account. Sign in from the NASAHub home page."
+      : "Sign in with a guest, user, or admin account from the NASAHub home page."
+    : isForbidden && isGuestLogin()
+      ? "Guest login can explore analytics but cannot use protected admin actions or Ask NASAHub."
     : "NASAHub could not complete this request yet. Try refreshing this workspace or switching views and coming back.";
   document.querySelector(
     `#${targetId}`
@@ -323,47 +375,132 @@ function renderStatePanel(targetId, { eyebrow = "", title, body, items = [], ton
 
 function updateApiModeIndicator() {
   const modeBanner = document.querySelector("#mode-banner");
+  if (loginStatus) {
+    loginStatus.textContent = state.loginRole
+      ? `Signed in as ${state.loginRole}.`
+      : "Sign in from the NASAHub home page.";
+  }
   if (state.token) {
     apiModeIndicator.className = "section-badge section-badge--ok";
-    apiModeIndicator.textContent = "Token mode active";
-    modeBanner.className = "mode-banner mode-banner--admin";
-    modeBanner.textContent =
-      "Admin mode: analytics, saved contexts, and pinned items are stored on the Lenovo for shared operational use.";
+    apiModeIndicator.textContent = "Authenticated";
+    updateModeBanner(modeBanner, "mode-banner mode-banner--admin", "Authenticated access: analytics, Ask NASAHub, saved contexts, and pins are available.");
+    updateGuestChatAccess();
+    return;
+  }
+  if (state.loginRole === "admin") {
+    apiModeIndicator.className = "section-badge section-badge--ok";
+    apiModeIndicator.textContent = "Admin account";
+    updateModeBanner(modeBanner, "mode-banner mode-banner--admin", "Admin login: analytics, Ask NASAHub, saved contexts, and pinned items are available.");
+    updateGuestChatAccess();
+    return;
+  }
+  if (state.loginRole === "user") {
+    apiModeIndicator.className = "section-badge section-badge--ok";
+    apiModeIndicator.textContent = "User account";
+    updateModeBanner(modeBanner, "mode-banner mode-banner--admin", "User login: analytics and Ask NASAHub are available.");
+    updateGuestChatAccess();
+    return;
+  }
+  if (state.loginRole === "guest") {
+    apiModeIndicator.className = "section-badge section-badge--ok";
+    apiModeIndicator.textContent = "Guest account";
+    updateModeBanner(modeBanner, "mode-banner mode-banner--guest", "Guest account: analytics are available, while Ask NASAHub and shared workspace actions stay locked.");
+    updateGuestChatAccess();
     return;
   }
   if (state.viewerMode) {
     apiModeIndicator.className = "section-badge section-badge--ok";
-    apiModeIndicator.textContent = "Viewer link active";
-    modeBanner.className = "mode-banner mode-banner--viewer";
-    modeBanner.textContent =
-      "Viewer mode: you can explore the product, use Ask NASAHub, and keep your own local shelf in this browser without changing shared Lenovo state.";
+    apiModeIndicator.textContent = "Shared access";
+    updateModeBanner(modeBanner, "mode-banner mode-banner--guest", "Shared access is active. For account permissions, sign in from the NASAHub home page.");
+    updateGuestChatAccess();
     return;
   }
   apiModeIndicator.className = "section-badge section-badge--loading";
-  apiModeIndicator.textContent = "Guest mode";
-  modeBanner.className = "mode-banner mode-banner--guest";
-  modeBanner.textContent =
-    "Guest mode: open NASAHub with a viewer link or add your admin token to unlock protected analytics routes.";
+  apiModeIndicator.textContent = "Signed out";
+  updateModeBanner(modeBanner, "mode-banner mode-banner--guest", "Sign in from the NASAHub home page with a guest, user, or admin account.");
+  updateGuestChatAccess();
+}
+
+function updateModeBanner(target, className, text) {
+  if (!target) {
+    return;
+  }
+  target.className = className;
+  target.textContent = text;
+}
+
+async function loginWithAccount() {
+  loginStatus.textContent = "Signing in...";
+  try {
+    const response = await fetch("/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        username: loginUsername.value,
+        password: loginPassword.value,
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`${response.status} ${response.statusText}: ${body}`);
+    }
+    const payload = await response.json();
+    state.loginRole = payload.role;
+    state.viewerMode = false;
+    state.askHistory = getStoredJson(storageKey("ask_history", state.viewerMode, state.loginRole), []);
+    state.pins = getStoredJson(storageKey("pins", state.viewerMode, state.loginRole), []);
+    state.recentComparisons = getStoredJson(storageKey("recent_comparisons", state.viewerMode, state.loginRole), []);
+    state.savedContexts = getStoredJson(storageKey("saved_contexts", state.viewerMode, state.loginRole), []);
+    loginPassword.value = "";
+    updateApiModeIndicator();
+    renderAskHistory();
+    renderSessionShelf();
+    await refreshCurrentView();
+  } catch (error) {
+    loginStatus.textContent = `Login failed: ${error.message}`;
+  }
+}
+
+function updateGuestChatAccess() {
+  const guestBlocked = isGuestLogin();
+  document.querySelector("#ask-nasahub").disabled = guestBlocked;
+  document.querySelector("#save-ask-context").disabled = guestBlocked;
+  document.querySelector("#share-ask-context").disabled = false;
+  document.querySelector("#export-ask-response").disabled = false;
+  if (guestBlocked) {
+    renderStatePanel("ask-nasahub-response", {
+      eyebrow: "Guest access",
+      title: "Ask NASAHub is locked for guest",
+      body: "Guest can browse analytics. Sign in with a user or admin account to use the chatbot.",
+      tone: "warning",
+    });
+  }
 }
 
 function persistAskHistory() {
-  localStorage.setItem(storageKey("ask_history", state.viewerMode), JSON.stringify(state.askHistory.slice(-8)));
+  localStorage.setItem(
+    storageKey("ask_history", state.viewerMode, state.loginRole),
+    JSON.stringify(state.askHistory.slice(-8))
+  );
 }
 
 function persistPins() {
-  localStorage.setItem(storageKey("pins", state.viewerMode), JSON.stringify(state.pins.slice(0, 12)));
+  localStorage.setItem(storageKey("pins", state.viewerMode, state.loginRole), JSON.stringify(state.pins.slice(0, 12)));
 }
 
 function persistRecentComparisons() {
   localStorage.setItem(
-    storageKey("recent_comparisons", state.viewerMode),
+    storageKey("recent_comparisons", state.viewerMode, state.loginRole),
     JSON.stringify(state.recentComparisons.slice(-8))
   );
 }
 
 function persistSavedContexts() {
   localStorage.setItem(
-    storageKey("saved_contexts", state.viewerMode),
+    storageKey("saved_contexts", state.viewerMode, state.loginRole),
     JSON.stringify(state.savedContexts.slice(0, 8))
   );
 }
@@ -482,7 +619,7 @@ function buildSavedContextLabel(mode, source, entityId, comparisonEntityId, ques
 
 async function saveContextToBackend(candidate) {
   const target = document.querySelector("#ask-nasahub-response");
-  if (isViewerMode()) {
+  if (usesLocalShelf()) {
     state.savedContexts = upsertFront(
       state.savedContexts,
       candidate,
@@ -496,7 +633,9 @@ async function saveContextToBackend(candidate) {
     );
     persistSavedContexts();
     renderSessionShelf();
-    target.textContent = "Saved locally for this viewer session. Shared link users keep their own private shelf.";
+    target.textContent = isGuestLogin()
+      ? "Saved locally for this guest login. Ask contexts are not shared to the Lenovo from guest mode."
+      : "Saved locally for this browser session.";
     return;
   }
   target.textContent = "Saving current context to NASAHub...";
@@ -544,8 +683,8 @@ async function saveContextToBackend(candidate) {
 }
 
 async function loadSavedContextsFromBackend() {
-  if (isViewerMode()) {
-    state.savedContexts = getStoredJson(storageKey("saved_contexts", state.viewerMode), []);
+  if (usesLocalShelf()) {
+    state.savedContexts = getStoredJson(storageKey("saved_contexts", state.viewerMode, state.loginRole), []);
     renderSessionShelf();
     return;
   }
@@ -565,14 +704,14 @@ async function loadSavedContextsFromBackend() {
     }));
     persistSavedContexts();
   } catch (error) {
-    state.savedContexts = getStoredJson(storageKey("saved_contexts", state.viewerMode), []);
+    state.savedContexts = getStoredJson(storageKey("saved_contexts", state.viewerMode, state.loginRole), []);
   }
   renderSessionShelf();
 }
 
 async function savePinToBackend(candidate) {
   const target = document.querySelector("#ask-nasahub-response");
-  if (isViewerMode()) {
+  if (usesLocalShelf()) {
     state.pins = upsertFront(
       state.pins,
       candidate,
@@ -582,7 +721,9 @@ async function savePinToBackend(candidate) {
     persistPins();
     renderSessionShelf();
     target.textContent =
-      `${candidate.label} is now ${candidate.watchlist ? "in your local watchlist" : "pinned locally"} for this viewer link.`;
+      `${candidate.label} is now ${candidate.watchlist ? "in your local watchlist" : "pinned locally"} for this ${
+        isGuestLogin() ? "guest account" : "browser session"
+      }.`;
     return;
   }
   target.textContent = `Saving ${candidate.label} to NASAHub...`;
@@ -622,8 +763,8 @@ async function savePinToBackend(candidate) {
 }
 
 async function loadPinsFromBackend() {
-  if (isViewerMode()) {
-    state.pins = getStoredJson(storageKey("pins", state.viewerMode), []);
+  if (usesLocalShelf()) {
+    state.pins = getStoredJson(storageKey("pins", state.viewerMode, state.loginRole), []);
     renderSessionShelf();
     return;
   }
@@ -640,13 +781,13 @@ async function loadPinsFromBackend() {
     }));
     persistPins();
   } catch (error) {
-    state.pins = getStoredJson(storageKey("pins", state.viewerMode), []);
+    state.pins = getStoredJson(storageKey("pins", state.viewerMode, state.loginRole), []);
   }
   renderSessionShelf();
 }
 
 async function deletePin(pinId) {
-  if (isViewerMode()) {
+  if (usesLocalShelf()) {
     return;
   }
   const response = await fetch(`/analytics/pins/${encodeURIComponent(pinId)}`, {
@@ -854,6 +995,9 @@ function bindOsdrPinButtons() {
 }
 
 async function deleteSavedContext(contextId) {
+  if (usesLocalShelf()) {
+    return;
+  }
   const response = await fetch(`/analytics/saved-contexts/${encodeURIComponent(contextId)}`, {
     method: "DELETE",
     headers: requestHeaders(),
@@ -1058,7 +1202,7 @@ function applySharedStateFromUrl() {
 
 function clearAskHistory() {
   state.askHistory = [];
-  localStorage.removeItem(storageKey("ask_history", state.viewerMode));
+  localStorage.removeItem(storageKey("ask_history", state.viewerMode, state.loginRole));
   renderAskHistory();
   renderStatePanel("ask-nasahub-response", {
     eyebrow: "Conversation reset",
@@ -2136,6 +2280,9 @@ async function ensureViewLoaded(view) {
 function updateLastRefreshLabel() {
   const loadedCount = Object.values(state.loadedViews).filter(Boolean).length;
   const viewLabel = state.view === "workspace" ? "Ask & Explore" : state.view.charAt(0).toUpperCase() + state.view.slice(1);
+  if (!lastRefresh) {
+    return;
+  }
   lastRefresh.textContent =
     loadedCount === 0
       ? "Waiting for first load..."
@@ -3217,6 +3364,16 @@ async function loadExoplanetInsight(plName, mode) {
 }
 
 async function loadAskNasaHub() {
+  if (isGuestLogin()) {
+    renderStatePanel("ask-nasahub-response", {
+      eyebrow: "Guest access",
+      title: "Ask NASAHub is locked for guest",
+      body: "Sign in with a user or admin account to use the chatbot.",
+      tone: "warning",
+    });
+    return;
+  }
+
   const mode = askModeSelect.value;
   const source = askSourceSelect.value;
   const entityId = askEntityInput.value.trim();

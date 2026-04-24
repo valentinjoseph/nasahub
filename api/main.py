@@ -1,4 +1,6 @@
 import json
+import hmac
+from hashlib import sha256
 from collections import defaultdict, deque
 from pathlib import Path
 from threading import Lock
@@ -15,15 +17,22 @@ from sqlalchemy.orm import Session
 from api.routes import analytics_router
 from api.schemas import HealthResponse
 from core.config import (
+    ADMIN_NAME,
+    ADMIN_PASSWORD,
     API_AUTH_TOKEN,
     ASK_RATE_LIMIT_MAX_REQUESTS,
     API_ENABLE_DOCS,
     API_REQUIRE_AUTH,
     API_TITLE,
     API_VERSION,
+    LOGIN_SESSION_SECRET,
+    GUEST_NAME,
+    GUEST_PASSWORD,
     PUBLIC_RATE_LIMIT_MAX_REQUESTS,
     PUBLIC_RATE_LIMIT_WINDOW_SECONDS,
     RATE_LIMIT_ENABLED,
+    USER_NAME,
+    USER_PASSWORD,
     VIEWER_ACCESS_TOKEN,
 )
 from db.deps import get_db
@@ -49,6 +58,8 @@ app = FastAPI(
 EXEMPT_AUTH_PATHS = {
     "/",
     "/dashboard",
+    "/login",
+    "/logout",
     "/viewer",
     "/viewer/logout",
     "/health",
@@ -56,6 +67,9 @@ EXEMPT_AUTH_PATHS = {
     "/health/ready",
 }
 VIEWER_ALLOWED_POST_PATHS = {"/analytics/ask"}
+LOGIN_COOKIE_NAME = "nasahub_login_session"
+LOGIN_ROLE_COOKIE_NAME = "nasahub_login_role"
+LOGIN_ROLES = {"admin", "user", "guest"}
 RATE_LIMIT_BUCKETS = {
     "public": defaultdict(deque),
     "ask": defaultdict(deque),
@@ -65,6 +79,47 @@ RATE_LIMIT_LOCK = Lock()
 
 def path_requires_auth(path: str) -> bool:
     return path not in EXEMPT_AUTH_PATHS and not path.startswith("/dashboard-assets/")
+
+
+def get_login_accounts() -> dict[str, tuple[str, str]]:
+    return {
+        "admin": (ADMIN_NAME, ADMIN_PASSWORD),
+        "user": (USER_NAME, USER_PASSWORD),
+        "guest": (GUEST_NAME, GUEST_PASSWORD),
+    }
+
+
+def get_login_role(username: str, password: str) -> str | None:
+    normalized_username = username.strip().lower()
+    for role, (account_name, account_password) in get_login_accounts().items():
+        if not account_name or not account_password:
+            continue
+        if normalized_username != account_name.strip().lower():
+            continue
+        if hmac.compare_digest(password, account_password):
+            return role
+    return None
+
+
+def sign_login_session(role: str) -> str:
+    signature = hmac.new(LOGIN_SESSION_SECRET.encode(), role.encode(), sha256).hexdigest()
+    return f"{role}.{signature}"
+
+
+def parse_login_session(value: str | None) -> str | None:
+    if not value or "." not in value:
+        return None
+    role, signature = value.rsplit(".", 1)
+    if role not in LOGIN_ROLES:
+        return None
+    expected = sign_login_session(role).rsplit(".", 1)[1]
+    if hmac.compare_digest(signature, expected):
+        return role
+    return None
+
+
+def request_login_role(request: Request) -> str | None:
+    return parse_login_session(request.cookies.get(LOGIN_COOKIE_NAME))
 
 
 def request_has_valid_auth(headers: dict, expected_token: str | None) -> bool:
@@ -104,6 +159,14 @@ def viewer_request_is_allowed(method: str, path: str) -> bool:
         return path not in {"/analytics/saved-contexts", "/analytics/pins"}
     if method == "POST" and path in VIEWER_ALLOWED_POST_PATHS:
         return True
+    return False
+
+
+def guest_request_is_allowed(method: str, path: str) -> bool:
+    if path in EXEMPT_AUTH_PATHS or path.startswith("/dashboard-assets/"):
+        return True
+    if method == "GET" and path.startswith("/analytics/"):
+        return path not in {"/analytics/saved-contexts", "/analytics/pins"}
     return False
 
 
@@ -218,8 +281,21 @@ async def add_request_context(request: Request, call_next):
 
 @app.middleware("http")
 async def enforce_api_auth(request: Request, call_next):
+    login_role = request_login_role(request)
+    if login_role == "guest" and not guest_request_is_allowed(request.method, request.url.path):
+        response = JSONResponse(
+            status_code=403,
+            content={"detail": "Guest access cannot use this route"},
+        )
+        response.headers["X-Request-ID"] = get_request_id(request.headers)
+        return response
+
     if API_REQUIRE_AUTH and path_requires_auth(request.url.path):
         if request_has_valid_auth(request.headers, API_AUTH_TOKEN):
+            return await call_next(request)
+        if login_role in {"admin", "user"}:
+            return await call_next(request)
+        if login_role == "guest" and guest_request_is_allowed(request.method, request.url.path):
             return await call_next(request)
         if request_has_valid_viewer_auth(request, VIEWER_ACCESS_TOKEN):
             if viewer_request_is_allowed(request.method, request.url.path):
@@ -246,6 +322,8 @@ async def enforce_rate_limits(request: Request, call_next):
         return await call_next(request)
 
     if request_has_valid_auth(request.headers, API_AUTH_TOKEN):
+        return await call_next(request)
+    if request_login_role(request) in {"admin", "user"}:
         return await call_next(request)
 
     scope = get_rate_limit_scope(request.method, request.url.path)
@@ -276,12 +354,56 @@ def database_ready() -> bool:
 
 @app.get("/", include_in_schema=False)
 def root():
-    return FileResponse(PUBLIC_INDEX)
+    response = FileResponse(PUBLIC_INDEX)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.get("/dashboard", include_in_schema=False)
 def dashboard():
-    return FileResponse(DASHBOARD_INDEX)
+    response = FileResponse(DASHBOARD_INDEX)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/login", include_in_schema=False)
+async def login(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    username = str(payload.get("username", "")).strip()
+    password = str(payload.get("password", ""))
+    role = get_login_role(username, password)
+    if not role:
+        return JSONResponse(status_code=401, content={"detail": "Invalid username or password"})
+
+    response = JSONResponse(content={"role": role})
+    response.set_cookie(
+        key=LOGIN_COOKIE_NAME,
+        value=sign_login_session(role),
+        httponly=True,
+        secure=is_secure_request(request),
+        samesite="lax",
+    )
+    response.set_cookie(
+        key=LOGIN_ROLE_COOKIE_NAME,
+        value=role,
+        httponly=False,
+        secure=is_secure_request(request),
+        samesite="lax",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.get("/logout", include_in_schema=False)
+def logout():
+    response = RedirectResponse(url="/", status_code=303)
+    response.delete_cookie(key=LOGIN_COOKIE_NAME)
+    response.delete_cookie(key=LOGIN_ROLE_COOKIE_NAME)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.get("/viewer", include_in_schema=False)

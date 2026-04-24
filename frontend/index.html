@@ -16,19 +16,12 @@
             Curated analytics, operational monitoring, and the Ask NASAHub workspace running from the Lenovo and published through nasahub.cloud.
           </p>
         </div>
-        <div class="hero__controls">
+        <div class="hero__controls account-controls">
           <div class="hero__status-row">
-            <span id="api-mode-indicator" class="section-badge section-badge--loading">Guest mode</span>
+            <span id="api-mode-indicator" class="section-badge section-badge--loading">Signed out</span>
           </div>
-          <div id="mode-banner" class="mode-banner mode-banner--guest">
-            Guest mode: open NASAHub through the public viewer flow or add your admin token to unlock shared Lenovo-backed state.
-          </div>
-          <label class="token-box">
-            <span>API Token</span>
-            <input id="api-token" type="password" placeholder="Optional while auth is disabled" />
-          </label>
-          <button id="refresh-all" class="button button--primary">Refresh Dashboard</button>
-          <p id="last-refresh" class="muted">Waiting for first load...</p>
+          <button id="logout-button" class="button button--ghost" type="button">Sign Out</button>
+          <p id="last-refresh" class="muted" hidden>Waiting for first load...</p>
         </div>
       </header>
 
@@ -58,7 +51,7 @@
             <article class="source-chip">
               <div class="source-chip__label">Saved work</div>
               <div class="source-chip__value">Know where it lives</div>
-            <div class="source-chip__sub">Admin mode saves on the Lenovo. Viewer mode keeps your shelf private in this browser.</div>
+            <div class="source-chip__sub">Admin and user accounts can use shared workspace features. Guest keeps shelf work local to this browser.</div>
           </article>
         </div>
       </section>
@@ -511,6 +504,6 @@
       <div class="loading">Loading...</div>
     </template>
 
-    <script src="/dashboard-assets/dashboard.js" type="module"></script>
+    <script src="/dashboard-assets/dashboard.js?v=account-ui-20260424" type="module"></script>
   </body>
 </html>

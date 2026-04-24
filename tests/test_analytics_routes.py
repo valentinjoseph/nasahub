@@ -16,13 +16,17 @@ from api.main import (
     consume_rate_limit,
     get_request_id,
     get_rate_limit_scope,
+    get_login_role,
+    guest_request_is_allowed,
     health,
     health_live,
     health_ready,
     path_requires_auth,
+    parse_login_session,
     request_has_valid_auth,
     request_has_valid_viewer_auth,
     root,
+    sign_login_session,
     viewer,
     viewer_logout,
     viewer_request_is_allowed,
@@ -450,6 +454,8 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
     def test_health_paths_are_exempt_from_auth(self):
         self.assertFalse(path_requires_auth("/"))
         self.assertFalse(path_requires_auth("/dashboard"))
+        self.assertFalse(path_requires_auth("/login"))
+        self.assertFalse(path_requires_auth("/logout"))
         self.assertFalse(path_requires_auth("/viewer"))
         self.assertFalse(path_requires_auth("/viewer/logout"))
         self.assertFalse(path_requires_auth("/dashboard-assets/dashboard.js"))
@@ -505,6 +511,32 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
         )
         self.assertFalse(request_has_valid_auth({}, expected_token))
 
+    def test_login_session_signature_round_trips_for_known_roles(self):
+        admin_session = sign_login_session("admin")
+        user_session = sign_login_session("user")
+        guest_session = sign_login_session("guest")
+
+        self.assertEqual(parse_login_session(admin_session), "admin")
+        self.assertEqual(parse_login_session(user_session), "user")
+        self.assertEqual(parse_login_session(guest_session), "guest")
+        self.assertIsNone(parse_login_session(admin_session.replace("admin.", "guest.")))
+        self.assertIsNone(parse_login_session("viewer.invalid"))
+
+    def test_login_role_uses_configured_account_names_and_passwords(self):
+        with (
+            patch("api.main.ADMIN_NAME", "owner"),
+            patch("api.main.ADMIN_PASSWORD", "owner-pass"),
+            patch("api.main.USER_NAME", "analyst"),
+            patch("api.main.USER_PASSWORD", "analyst-pass"),
+            patch("api.main.GUEST_NAME", "visitor"),
+            patch("api.main.GUEST_PASSWORD", "visitor-pass"),
+        ):
+            self.assertEqual(get_login_role("owner", "owner-pass"), "admin")
+            self.assertEqual(get_login_role("analyst", "analyst-pass"), "user")
+            self.assertEqual(get_login_role("visitor", "visitor-pass"), "guest")
+            self.assertEqual(get_login_role(" Owner ", "owner-pass"), "admin")
+            self.assertIsNone(get_login_role("analyst", "wrong-pass"))
+
     def test_viewer_auth_supports_header_query_and_cookie(self):
         expected_token = "viewer-token"
 
@@ -540,6 +572,12 @@ class AnalyticsRoutesTestCase(unittest.TestCase):
         self.assertFalse(viewer_request_is_allowed("POST", "/analytics/pins"))
         self.assertFalse(viewer_request_is_allowed("DELETE", "/analytics/pins/pin-1"))
         self.assertFalse(viewer_request_is_allowed("GET", "/analytics/saved-contexts"))
+
+    def test_guest_request_policy_blocks_chatbot_and_admin_writes(self):
+        self.assertTrue(guest_request_is_allowed("GET", "/analytics/catalog"))
+        self.assertFalse(guest_request_is_allowed("POST", "/analytics/ask"))
+        self.assertFalse(guest_request_is_allowed("POST", "/analytics/pins"))
+        self.assertFalse(guest_request_is_allowed("GET", "/analytics/saved-contexts"))
 
     def test_rate_limit_scope_prioritizes_public_and_ask_paths(self):
         self.assertEqual(get_rate_limit_scope("GET", "/"), "public")
