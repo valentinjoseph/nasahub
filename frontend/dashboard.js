@@ -470,6 +470,7 @@ function updateGuestChatAccess() {
   document.querySelector("#save-ask-context").disabled = guestBlocked;
   document.querySelector("#share-ask-context").disabled = false;
   document.querySelector("#export-ask-response").disabled = false;
+  applyGuestWorkspaceAccess(guestBlocked);
   if (guestBlocked) {
     renderStatePanel("ask-nasahub-response", {
       eyebrow: "Guest access",
@@ -477,6 +478,35 @@ function updateGuestChatAccess() {
       body: "Guest can browse analytics. Sign in with a user or admin account to use the chatbot.",
       tone: "warning",
     });
+  }
+}
+
+function applyGuestWorkspaceAccess(guestBlocked) {
+  const workspaceButton = document.querySelector('[data-view="workspace"]');
+  const assistantButton = document.querySelector('[data-workspace-view="ask"]');
+  const askPanel = document.querySelector('[data-workspace-panel="ask"]');
+  const workspaceTitle = document.querySelector('[data-panel-group="workspace"] .panel__head h2');
+  const workspaceCopy = document.querySelector('[data-panel-group="workspace"] .panel__head p');
+
+  if (workspaceButton) {
+    workspaceButton.textContent = guestBlocked ? "Explore" : "Ask & Explore";
+  }
+  if (assistantButton) {
+    assistantButton.hidden = guestBlocked;
+  }
+  if (askPanel) {
+    askPanel.hidden = guestBlocked || state.workspaceView !== "ask";
+  }
+  if (workspaceTitle) {
+    workspaceTitle.textContent = guestBlocked ? "Explore NASAHub" : "Ask NASAHub";
+  }
+  if (workspaceCopy) {
+    workspaceCopy.textContent = guestBlocked
+      ? "Use the source explorers for read-only analysis across curated NASAHub data."
+      : "Use the agent workspace for grounded questions, matched entities, comparisons, and guided follow-up prompts.";
+  }
+  if (guestBlocked && state.workspaceView === "ask") {
+    setWorkspaceView("neows");
   }
 }
 
@@ -1464,6 +1494,9 @@ async function setDashboardView(view) {
 }
 
 function setWorkspaceView(view) {
+  if (isGuestLogin() && view === "ask") {
+    view = "neows";
+  }
   state.workspaceView = view;
   document.querySelectorAll("[data-workspace-view]").forEach((button) => {
     button.classList.toggle("tab-button--active", button.dataset.workspaceView === view);
