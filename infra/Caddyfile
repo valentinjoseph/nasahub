@@ -20,6 +20,21 @@
     reverse_proxy api:8000
 }
 
+(lifescience_watch_common) {
+    encode zstd gzip
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "interest-cohort=()"
+        X-Robots-Tag "noindex, nofollow, noarchive"
+        -Server
+    }
+
+    reverse_proxy lifescience_watch:8011
+}
+
 {$NASAHUB_PUBLIC_HOST:nasahub.cloud}, www.{$NASAHUB_PUBLIC_HOST:nasahub.cloud} {
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
@@ -28,6 +43,16 @@
         Cross-Origin-Resource-Policy "same-origin"
     }
     import nasahub_common
+}
+
+life-science-news.com, www.life-science-news.com {
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        Content-Security-Policy "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Resource-Policy "same-origin"
+    }
+    import lifescience_watch_common
 }
 
 http://{$NASAHUB_BIND_IP:192.168.1.28} {
